@@ -1,0 +1,92 @@
+// Loop Burn Engine - Database Schema
+// Uses PostgreSQL (Neon for production)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User managed by Clerk, we store user data
+model User {
+  id        String   @id // Clerk user ID
+  clerkId   String   @unique
+  email     String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  userData    UserData?
+  taskHistory TaskHistory[]
+  openLoops   OpenLoop[]
+  
+  @@index([clerkId])
+}
+
+// User data (current state, preferences)
+model UserData {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Current task state
+  hourlyRate    Float    @default(90)
+  currentTask   String?  @default("")
+  category      String?  @default("rock") // 'rock', 'pebble', 'sand'
+  timer         Int      @default(0) // seconds
+  timerStartTime BigInt? // UTC timestamp in milliseconds when timer started
+  
+  // UI preferences
+  showMinerals  Boolean  @default(true)
+  taskHistoryMinimized Boolean @default(false)
+  openLoopsMinimized Boolean @default(false)
+  
+  // Login streak
+  loginStreak   Int      @default(1)
+  lastLoginDate String?  // Date string (local)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([userId])
+}
+
+// Task history (completed tasks)
+model TaskHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name      String
+  category  String   // 'rock', 'pebble', 'sand'
+  cost      String   // Money spent (formatted string)
+  timestamp BigInt   // UTC timestamp in milliseconds
+  duration  Int      // Duration in seconds
+  
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+  @@index([timestamp])
+}
+
+// Open loops (distractions)
+model OpenLoop {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name      String
+  timer     Int      @default(0) // seconds
+  rate      Float    @default(1000) // hourly rate
+  isActive  Boolean  @default(false)
+  timerStartTime BigInt? // UTC timestamp in milliseconds when timer started
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([userId])
+}

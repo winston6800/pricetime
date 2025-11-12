@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useMemo, memo } from "react"
 import { FaMinus, FaPaperPlane, FaPlay, FaPause, FaPlus, FaRedo } from "react-icons/fa"
 import { MdDelete } from "react-icons/md"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { fetchUserData, saveUserData, fetchTasks, createTask, deleteTask, fetchLoops, saveLoop, deleteLoop } from '@/lib/api-helpers';
 
 const formatTime = (seconds: number) => {
   const m = Math.floor(seconds / 60)
@@ -278,123 +279,57 @@ export default function BurnEngine() {
   const [taskHistoryMinimized, setTaskHistoryMinimized] = useState<boolean>(false);
   const [loginStreak, setLoginStreak] = useState<number>(0);
   const [lastLoginDate, setLastLoginDate] = useState<string>("");
-
-  // Data migration function
-  const migrateData = (data: any, currentVersion: string) => {
-    const savedVersion = localStorage.getItem("burnEngine_dataVersion");
-    
-    // Create backup of existing data before migration
-    if (!savedVersion && data) {
-      localStorage.setItem("burnEngine_backup_" + Date.now(), JSON.stringify(data));
-    }
-    
-    // If no version saved, this is the first time or old data
-    if (!savedVersion) {
-      // Migrate to version 1.1 (add category field)
-      if (Array.isArray(data)) {
-        return data.map((task: any) => ({
-          ...task,
-          category: task.category || "rock" // Default to rock for existing tasks
-        }));
-      }
-    }
-    
-    // For future migrations, you can add more version checks here
-    // Example:
-    // if (savedVersion === "1.1" && currentVersion === "1.2") {
-    //   // Migrate from 1.1 to 1.2
-    // }
-    
-    return data;
-  };
-
-  // On mount, load state from localStorage (browser only)
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const savedRate = localStorage.getItem("burnEngine_hourlyRate");
-      if (savedRate) setHourlyRate(Number(savedRate));
-      const savedTimer = localStorage.getItem("burnEngine_timer");
-      if (savedTimer) setTimer(Number(savedTimer));
-      const savedTask = localStorage.getItem("burnEngine_currentTask");
-      if (savedTask) setCurrentTask(savedTask);
-      const savedCategory = localStorage.getItem("burnEngine_currentTaskCategory");
-      if (savedCategory) setCurrentTaskCategory(savedCategory);
-      const savedHistory = localStorage.getItem("burnEngine_taskHistory");
-      if (savedHistory) {
-        const parsedHistory = JSON.parse(savedHistory);
-        // Migrate existing data to include category field
-        const migratedHistory = migrateData(parsedHistory, "1.1");
-        setTaskHistory(migratedHistory);
-      }
-      
-      const savedShowMinerals = localStorage.getItem("burnEngine_showMinerals");
-      if (savedShowMinerals !== null) {
-        setShowMinerals(JSON.parse(savedShowMinerals));
-      }
-      
-      const savedTaskHistoryMinimized = localStorage.getItem("burnEngine_taskHistoryMinimized");
-      if (savedTaskHistoryMinimized !== null) {
-        setTaskHistoryMinimized(JSON.parse(savedTaskHistoryMinimized));
-      }
-      
-      // Load login streak data
-      const savedLoginStreak = localStorage.getItem("burnEngine_loginStreak");
-      const savedLastLoginDate = localStorage.getItem("burnEngine_lastLoginDate");
-      
-      if (savedLoginStreak && savedLastLoginDate) {
-        const currentDate = new Date().toDateString();
-        const lastLogin = savedLastLoginDate;
-        
-        if (currentDate === lastLogin) {
-          // Already logged in today, keep current streak
-          setLoginStreak(Number(savedLoginStreak));
-          setLastLoginDate(lastLogin);
-        } else {
-          // Check if it's consecutive days
-          const lastLoginTime = new Date(lastLogin).getTime();
-          const currentTime = new Date().getTime();
-          const daysDiff = Math.floor((currentTime - lastLoginTime) / (1000 * 60 * 60 * 24));
-          
-          if (daysDiff === 1) {
-            // Consecutive day, increment streak
-            const newStreak = Number(savedLoginStreak) + 1;
-            setLoginStreak(newStreak);
-            setLastLoginDate(currentDate);
-            localStorage.setItem("burnEngine_loginStreak", newStreak.toString());
-            localStorage.setItem("burnEngine_lastLoginDate", currentDate);
-          } else if (daysDiff > 1) {
-            // Streak broken, reset to 1
-            setLoginStreak(1);
-            setLastLoginDate(currentDate);
-            localStorage.setItem("burnEngine_loginStreak", "1");
-            localStorage.setItem("burnEngine_lastLoginDate", currentDate);
-          } else {
-            // Same day, keep current streak
-            setLoginStreak(Number(savedLoginStreak));
-            setLastLoginDate(lastLogin);
-          }
-        }
-      } else {
-        // First time logging in
-        const currentDate = new Date().toDateString();
-        setLoginStreak(1);
-        setLastLoginDate(currentDate);
-        localStorage.setItem("burnEngine_loginStreak", "1");
-        localStorage.setItem("burnEngine_lastLoginDate", currentDate);
-      }
-      
-      // Set current data version
-      localStorage.setItem("burnEngine_dataVersion", "1.1");
-      setHasLoaded(true);
-    }
-  }, []);
-
   const startTimeRef = useRef<number | null>(null);
+
+  // On mount, load state from API
+  useEffect(() => {
+    async function loadData() {
+      try {
+        // Load user data
+        const userData = await fetchUserData();
+        setHourlyRate(userData.hourlyRate || 90);
+        setCurrentTask(userData.currentTask || '');
+        setCurrentTaskCategory(userData.category || 'rock');
+        setTimer(userData.timer || 0);
+        setShowMinerals(userData.showMinerals ?? true);
+        setTaskHistoryMinimized(userData.taskHistoryMinimized ?? false);
+        setLoginStreak(userData.loginStreak || 1);
+        setLastLoginDate(userData.lastLoginDate || new Date().toDateString());
+        
+        // Set timer start time if timer is running
+        if (userData.timerStartTime) {
+          startTimeRef.current = Number(userData.timerStartTime);
+        } else if (userData.timer > 0) {
+          // If timer has value but no start time, calculate it
+          startTimeRef.current = Date.now() - (userData.timer * 1000);
+        }
+        
+        // Load task history
+        const tasks = await fetchTasks();
+        setTaskHistory(tasks.map((task: any) => ({
+          name: task.name,
+          amount: task.cost,
+          timestamp: Number(task.timestamp),
+          duration: task.duration,
+          category: task.category,
+        })));
+        
+        setHasLoaded(true);
+      } catch (error) {
+        console.error('Error loading data:', error);
+        setHasLoaded(true); // Still set loaded to show UI
+      }
+    }
+    loadData();
+  }, []);
 
   // Start timer interval only after timer is loaded
   useEffect(() => {
     if (!hasLoaded) return;
-    startTimeRef.current = Date.now() - timer * 1000;
+    // Only set startTimeRef if it's not already set (from data load)
+    if (startTimeRef.current === null && timer > 0) {
+      startTimeRef.current = Date.now() - timer * 1000;
+    }
     const interval = setInterval(() => {
       if (startTimeRef.current) {
         const elapsedSeconds = Math.floor((Date.now() - startTimeRef.current) / 1000);
@@ -402,49 +337,28 @@ export default function BurnEngine() {
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [hasLoaded, timer]);
+  }, [hasLoaded]);
 
-  // Save state to localStorage whenever it changes
+  // Save state to API whenever it changes (debounced)
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("burnEngine_hourlyRate", hourlyRate.toString())
-    }
-  }, [hourlyRate])
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("burnEngine_timer", timer.toString())
-    }
-  }, [timer])
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("burnEngine_isRunning", JSON.stringify(false)) // isRunning is removed
-    }
-  }, [])
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("burnEngine_currentTask", currentTask)
-    }
-  }, [currentTask])
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("burnEngine_currentTaskCategory", currentTaskCategory)
-    }
-  }, [currentTaskCategory])
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("burnEngine_taskHistory", JSON.stringify(taskHistory))
-    }
-  }, [taskHistory])
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("burnEngine_showMinerals", JSON.stringify(showMinerals))
-    }
-  }, [showMinerals])
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("burnEngine_taskHistoryMinimized", JSON.stringify(taskHistoryMinimized))
-    }
-  }, [taskHistoryMinimized])
+    if (!hasLoaded) return;
+    const timeout = setTimeout(async () => {
+      try {
+        await saveUserData({
+          hourlyRate,
+          currentTask,
+          category: currentTaskCategory,
+          timer,
+          timerStartTime: startTimeRef.current,
+          showMinerals,
+          taskHistoryMinimized,
+        });
+      } catch (error) {
+        console.error('Error saving user data:', error);
+      }
+    }, 500); // Debounce saves by 500ms
+    return () => clearTimeout(timeout);
+  }, [hourlyRate, currentTask, currentTaskCategory, timer, showMinerals, taskHistoryMinimized, hasLoaded])
 
   const moneySpent = ((timer / 3600) * hourlyRate).toFixed(2)
   const perMinuteSpent = (hourlyRate / 60).toFixed(2)
@@ -455,33 +369,55 @@ export default function BurnEngine() {
     // setIsRunning(false) // isRunning is removed
   }
 
-  const handleReset = () => {
-    setTimer(0)
-    // setIsRunning(false) // isRunning is removed
-    startTimeRef.current = null
-    if (typeof window !== "undefined") {
-      localStorage.setItem("burnEngine_timer", "0")
-      localStorage.setItem("burnEngine_isRunning", "false")
+  const handleReset = async () => {
+    setTimer(0);
+    startTimeRef.current = null;
+    try {
+      await saveUserData({
+        timer: 0,
+        timerStartTime: null,
+      });
+    } catch (error) {
+      console.error('Error resetting timer:', error);
     }
   }
 
   // Handle finishing a task
-  const handleFinishTask = () => {
+  const handleFinishTask = async () => {
     if (currentTask.trim()) {
-      setTaskHistory([
-        {
+      try {
+        await createTask({
           name: currentTask,
-          amount: moneySpent,
-          timestamp: Date.now(),
-          duration: timer, // store duration in seconds
           category: currentTaskCategory,
-        },
-        ...taskHistory,
-      ]);
+          cost: moneySpent,
+          duration: timer,
+        });
+        
+        // Reload task history
+        const tasks = await fetchTasks();
+        setTaskHistory(tasks.map((task: any) => ({
+          name: task.name,
+          amount: task.cost,
+          timestamp: Number(task.timestamp),
+          duration: task.duration,
+          category: task.category,
+        })));
+      } catch (error) {
+        console.error('Error finishing task:', error);
+      }
     }
     setCurrentTask("");
     setTimer(0);
     startTimeRef.current = Date.now();
+    try {
+      await saveUserData({
+        currentTask: '',
+        timer: 0,
+        timerStartTime: Date.now(),
+      });
+    } catch (error) {
+      console.error('Error saving after finish task:', error);
+    }
   };
 
   // Prepare data for cumulative line chart
@@ -803,9 +739,29 @@ export default function BurnEngine() {
               )}
             </span>
             <button
-              onClick={() => {
-                const newHistory = [...taskHistory.slice(0, idx), ...taskHistory.slice(idx + 1)];
-                setTaskHistory(newHistory);
+              onClick={async () => {
+                try {
+                  // Find the task ID from the task history
+                  const tasks = await fetchTasks();
+                  const taskToDelete = tasks.find((t: any) => 
+                    t.name === task.name && 
+                    Number(t.timestamp) === task.timestamp
+                  );
+                  if (taskToDelete) {
+                    await deleteTask(taskToDelete.id);
+                    // Reload task history
+                    const updatedTasks = await fetchTasks();
+                    setTaskHistory(updatedTasks.map((t: any) => ({
+                      name: t.name,
+                      amount: t.cost,
+                      timestamp: Number(t.timestamp),
+                      duration: t.duration,
+                      category: t.category,
+                    })));
+                  }
+                } catch (error) {
+                  console.error('Error deleting task:', error);
+                }
               }}
               style={{
                 position: "absolute",
