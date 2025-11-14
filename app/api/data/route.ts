@@ -32,7 +32,7 @@ export async function GET() {
       });
     }
 
-    // Update login streak
+    // Update login streak (only if date changed, avoid unnecessary writes)
     const currentDate = new Date().toDateString();
     if (userData.lastLoginDate !== currentDate) {
       const lastLoginTime = userData.lastLoginDate 
@@ -44,15 +44,22 @@ export async function GET() {
       let newStreak = 1;
       if (daysDiff === 1) {
         newStreak = userData.loginStreak + 1;
+      } else if (daysDiff > 1) {
+        newStreak = 1; // Reset streak if gap > 1 day
+      } else {
+        newStreak = userData.loginStreak; // Same day, keep streak
       }
       
-      userData = await prisma.userData.update({
-        where: { userId: user.id },
-        data: {
-          loginStreak: newStreak,
-          lastLoginDate: currentDate,
-        },
-      });
+      // Only update if streak actually changed
+      if (newStreak !== userData.loginStreak || userData.lastLoginDate !== currentDate) {
+        userData = await prisma.userData.update({
+          where: { userId: user.id },
+          data: {
+            loginStreak: newStreak,
+            lastLoginDate: currentDate,
+          },
+        });
+      }
     }
 
     // Convert BigInt to string for JSON serialization

@@ -1,7 +1,9 @@
 "use client"
 
 import { useState, useRef, useEffect, useMemo, memo } from "react"
-import { FaMinus, FaPaperPlane, FaPlay, FaPause, FaPlus, FaSearch, FaChevronDown, FaChevronUp } from "react-icons/fa"
+import { useClerk, useUser } from '@clerk/nextjs'
+import { useRouter } from 'next/navigation'
+import { FaMinus, FaPaperPlane, FaPlay, FaPause, FaPlus, FaSearch, FaChevronDown, FaChevronUp, FaSignOutAlt } from "react-icons/fa"
 import { MdDelete } from "react-icons/md"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { fetchUserData, saveUserData, fetchTasks, createTask, deleteTask, fetchLoops, saveLoop, deleteLoop } from '@/lib/api-helpers';
@@ -333,12 +335,16 @@ export default function BurnEngine() {
   // Progress Dashboard
   const [timeframe, setTimeframe] = useState<"week" | "month">("week");
 
-  // On mount, load state from API
+  // On mount, load state from API (parallel loading for speed)
   useEffect(() => {
     async function loadData() {
       try {
-        // Load user data
-        const userData = await fetchUserData();
+        // Load user data and tasks in parallel for faster initial load
+        const [userData, tasks] = await Promise.all([
+          fetchUserData(),
+          fetchTasks()
+        ]);
+        
         setHourlyRate(userData.hourlyRate || 90);
         setCurrentTask(userData.currentTask || '');
         setCurrentTaskCategory(userData.category || 'rock');
@@ -356,9 +362,8 @@ export default function BurnEngine() {
           startTimeRef.current = Date.now() - (userData.timer * 1000);
         }
         
-        // Load task history
-        const tasks = await fetchTasks();
-        setTaskHistory(tasks.map((task: any) => ({
+        // Map tasks (limit to recent 200 for performance)
+        setTaskHistory(tasks.slice(0, 200).map((task: any) => ({
           id: task.id,
           name: task.name,
           amount: task.cost,
@@ -663,8 +668,47 @@ export default function BurnEngine() {
     }
   }, [showMinerals, taskHistory, hourlyRate]);
 
-  // Optionally, render nothing until timer is loaded
-  if (!hasLoaded) return null;
+  // Loading skeleton for better perceived performance
+  if (!hasLoaded) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#f8f9fa", padding: "2rem 1rem" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+          <div style={{ 
+            display: "flex", 
+            gap: 24, 
+            marginBottom: "2rem",
+            flexWrap: "wrap"
+          }}>
+            {/* Timer skeleton */}
+            <div style={{
+              flex: 1,
+              maxWidth: 400,
+              background: "#fff",
+              borderRadius: 12,
+              padding: 24,
+              boxShadow: "0 2px 12px #0001",
+            }}>
+              <div style={{ height: 20, background: "#e0e0e0", borderRadius: 4, marginBottom: 12, width: "60%" }}></div>
+              <div style={{ height: 40, background: "#e0e0e0", borderRadius: 4, marginBottom: 16 }}></div>
+              <div style={{ height: 60, background: "#e0e0e0", borderRadius: 4 }}></div>
+            </div>
+            {/* Chart skeleton */}
+            <div style={{
+              flex: 1,
+              maxWidth: 500,
+              background: "#fff",
+              borderRadius: 8,
+              padding: 16,
+              boxShadow: "0 1px 4px #0001",
+            }}>
+              <div style={{ height: 20, background: "#e0e0e0", borderRadius: 4, marginBottom: 12, width: "40%" }}></div>
+              <div style={{ height: 200, background: "#e0e0e0", borderRadius: 4 }}></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const toggleGroup = (group: string) => {
     setExpandedGroups(prev => {
@@ -681,8 +725,78 @@ export default function BurnEngine() {
   const displayedTasks = filteredAndSortedTasks.slice(0, tasksPerPage);
   const hasMore = filteredAndSortedTasks.length > tasksPerPage;
 
+  const { signOut } = useClerk();
+  const router = useRouter();
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      router.push('/sign-in');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+
+  const handleHome = () => {
+    router.push('/');
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: "#f8f9fa", padding: "2rem 1rem" }}>
+      {/* Navigation Header */}
+      <div style={{
+        maxWidth: 1200,
+        margin: "0 auto 2rem auto",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        padding: "0 1rem",
+      }}>
+        <button
+          onClick={handleHome}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "#3498db",
+            fontSize: 18,
+            fontWeight: 700,
+            padding: "8px 12px",
+            borderRadius: 6,
+            transition: "background 0.2s",
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.background = "#f0f0f0"}
+          onMouseLeave={(e) => e.currentTarget.style.background = "none"}
+        >
+          <span>BurnEngine</span>
+        </button>
+        <button
+          onClick={handleSignOut}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            background: "#f1f1f1",
+            border: "none",
+            cursor: "pointer",
+            color: "#666",
+            fontSize: 14,
+            fontWeight: 500,
+            padding: "8px 16px",
+            borderRadius: 6,
+            transition: "background 0.2s",
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.background = "#e0e0e0"}
+          onMouseLeave={(e) => e.currentTarget.style.background = "#f1f1f1"}
+        >
+          <FaSignOutAlt />
+          <span>Sign Out</span>
+        </button>
+      </div>
+
       {/* Flex row for main timer and cumulative chart */}
       <div
         style={{
@@ -857,21 +971,9 @@ export default function BurnEngine() {
             </button>
           </div>
           <MemoizedChart chartData={chartData} showMinerals={showMinerals} />
-          {showMinerals && chartData.length > 0 && (
-            <div style={{ marginTop: 12, fontSize: 12, color: "#666", textAlign: "center" }}>
-              {chartData.map((day, idx) => (
-                <div key={idx} style={{ marginBottom: 4 }}>
-                  {day.day}: {day.unaccountedHours}h unaccounted (${day.unaccountedCost})
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Open Loops and Task History below */}
-      <OpenLoopsDashboard mainTaskActive={true} pauseMainTask={() => {}} />
-      
       {/* Progress Dashboard */}
       {!taskHistoryMinimized && (
         <div style={{ maxWidth: 900, margin: "2rem auto", background: "#fff", borderRadius: 12, padding: 24, boxShadow: "0 2px 12px #0001" }}>
@@ -1214,6 +1316,9 @@ export default function BurnEngine() {
           </>
         )}
       </div>
+
+      {/* Open Loops - At the bottom (per spec) */}
+      <OpenLoopsDashboard mainTaskActive={true} pauseMainTask={() => {}} />
     </div>
   );
 }

@@ -63,12 +63,12 @@ A productivity timer that makes the cost of time visible. Users set an hourly ra
 - **Returning users:** Load existing data from database
 
 ### 3. Navigation & Sign Out
-- **Sign out button:** Available in main app (top right or header)
-  - Signs user out via Clerk
-  - Redirects to `/sign-in` page after sign out
-- **Home button:** Available in main app (top left or header)
-  - Takes user to landing page (`/`)
-  - Works even when signed in (shows landing page, but can access `/app` if needed)
+
+**Header:** Top of `/app` page, max-width 1200px, centered. Flexbox layout (space-between).
+
+**Brand/Home Button (Left):** Company name "BurnEngine" (no icon), blue (#3498db), hover gray bg. `router.push('/')` - instant nav. Session preserved, landing page shows "Continue to App" if signed in.
+
+**Sign Out Button (Right):** Icon + "Sign Out" text, gray bg (#f1f1f1), hover darker. Flow: `await useClerk().signOut()` → `router.push('/sign-in')`. Error: try/catch, log console, show message, stay on page. On success: redirect to sign-in.
 
 ### 4. Pricing Page (Public - `/pricing`)
 - **Target:** Convert free users to paid, show value of premium features
@@ -108,16 +108,6 @@ Category selected before/during task, saved with task in history.
 - Colors: red (rock), orange (pebble), gray (sand)
 - Updates immediately when task finished
 - Shows zeros for days with no tasks
-- Shows how much time and money went unaccounted for. 
-
-### Open Loops (Distractions)
-- **Placement**: Below Task History (secondary feature, less prominent)
-- **Default state**: Collapsed/minimized by default to minimize distractions
-- Minimizable section to track distractions
-- Add loop: textarea (auto-expands), adds to list
-- Each loop has: name, timer, cost ($1000/hr default), play/pause button
-- Only one loop active at a time (pauses main task when active)
-- Checkbox removes loop from list
 
 ### Task History
 - **Organization**: Tasks grouped by date (Today, Yesterday, This Week, Last Week, Older)
@@ -156,6 +146,15 @@ Category selected before/during task, saved with task in history.
 - **Display**: Shows when task history is expanded, collapses with history
 - **Data aggregation**: Automatically groups tasks by selected timeframe, calculates totals and averages
 
+### Open Loops (Distractions)
+- **Placement**: At the bottom, after Task History and Progress Dashboard (secondary feature, less prominent)
+- **Default state**: Collapsed/minimized by default to minimize distractions
+- Minimizable section to track distractions
+- Add loop: textarea (auto-expands), adds to list
+- Each loop has: name, timer, cost ($1000/hr default), play/pause button
+- Only one loop active at a time (pauses main task when active)
+- Checkbox removes loop from list
+
 ---
 
 ## User Flows
@@ -185,17 +184,6 @@ Category selected before/during task, saved with task in history.
 3. See money spent increase in real-time
 4. Click "Finish Task" → saves to history, resets timer, ready for next task
 
-### Sign Out Flow
-1. User clicks "Sign Out" button in app
-2. Clerk signs user out
-3. Redirects to `/sign-in` page
-4. User can sign back in or navigate to landing page
-
-### Navigation Flow
-1. User clicks "Home" button in app
-2. Redirects to landing page (`/`)
-3. If signed in, can still access `/app` directly
-4. Landing page shows for all users (public)
 
 ### Login Streak
 - Check on page load: did user visit yesterday?
@@ -340,8 +328,8 @@ Category selected before/during task, saved with task in history.
 - Protected routes: Everything else (including `/app`)
 - Use `auth()` from `@clerk/nextjs` to get current user in API routes
 - Client: use `useUser()` hook to check auth state
-- Sign out: Use `useClerk().signOut()` to sign out, redirect to `/sign-in`
-- Navigation: Home button links to `/` (landing page)
+
+**Navigation Implementation:** Import `useClerk`, `useRouter`. Home: `router.push('/')`. Sign out: `try { await useClerk().signOut(); router.push('/sign-in') } catch { log, show error }`. Icons: FaHome, FaSignOutAlt from react-icons.
 
 **Database:**
 - Prisma Client generated from schema

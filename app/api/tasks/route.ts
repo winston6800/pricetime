@@ -40,13 +40,16 @@ export async function POST(request: NextRequest) {
 /**
  * GET /api/tasks - Get user's task history
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth();
+    const { searchParams } = new URL(request.url);
+    const limit = parseInt(searchParams.get('limit') || '200'); // Default 200, max 1000
     
     const tasks = await prisma.taskHistory.findMany({
       where: { userId: user.id },
       orderBy: { timestamp: 'desc' },
+      take: Math.min(limit, 1000), // Cap at 1000 for performance
     });
 
     // Convert BigInt to string for JSON
