@@ -55,12 +55,20 @@ export async function GET() {
       });
     }
 
-    return NextResponse.json(userData);
+    // Convert BigInt to string for JSON serialization
+    const userDataResponse = {
+      ...userData,
+      timerStartTime: userData.timerStartTime ? userData.timerStartTime.toString() : null,
+    };
+    
+    return NextResponse.json(userDataResponse);
   } catch (error) {
     console.error('Error fetching data:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch data';
+    const status = errorMessage.includes('Unauthorized') ? 401 : 500;
     return NextResponse.json(
-      { error: 'Failed to fetch data' },
-      { status: 500 }
+      { error: errorMessage },
+      { status }
     );
   }
 }
@@ -100,12 +108,20 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json(userData);
+    // Convert BigInt to string for JSON serialization
+    const userDataResponse = {
+      ...userData,
+      timerStartTime: userData.timerStartTime ? userData.timerStartTime.toString() : null,
+    };
+    
+    return NextResponse.json(userDataResponse);
   } catch (error) {
     console.error('Error saving data:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to save data';
+    const status = errorMessage.includes('Unauthorized') ? 401 : 500;
     return NextResponse.json(
-      { error: 'Failed to save data' },
-      { status: 500 }
+      { error: errorMessage },
+      { status }
     );
   }
 }

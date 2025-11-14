@@ -21,7 +21,13 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json(task);
+    // Convert BigInt to string for JSON serialization
+    const taskResponse = {
+      ...task,
+      timestamp: task.timestamp.toString(),
+    };
+
+    return NextResponse.json(taskResponse);
   } catch (error) {
     console.error('Error creating task:', error);
     return NextResponse.json(
