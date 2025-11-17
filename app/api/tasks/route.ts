@@ -8,7 +8,7 @@ import { prisma } from '@/lib/db';
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth();
-    const { name, category, cost, duration } = await request.json();
+    const { name, category, cost, duration, valueEarned } = await request.json();
 
     const task = await prisma.taskHistory.create({
       data: {
@@ -18,6 +18,7 @@ export async function POST(request: NextRequest) {
         cost: cost || '0.00',
         timestamp: BigInt(Date.now()),
         duration: duration || 0,
+        valueEarned: valueEarned || 0,
       },
     });
 
@@ -40,16 +41,13 @@ export async function POST(request: NextRequest) {
 /**
  * GET /api/tasks - Get user's task history
  */
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const user = await requireAuth();
-    const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get('limit') || '200'); // Default 200, max 1000
     
     const tasks = await prisma.taskHistory.findMany({
       where: { userId: user.id },
       orderBy: { timestamp: 'desc' },
-      take: Math.min(limit, 1000), // Cap at 1000 for performance
     });
 
     // Convert BigInt to string for JSON
@@ -63,6 +61,48 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching tasks:', error);
     return NextResponse.json(
       { error: 'Failed to fetch tasks' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * PATCH /api/tasks - Update a task's valueEarned
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const user = await requireAuth();
+    const { taskId, valueEarned } = await request.json();
+
+    if (!taskId) {
+      return NextResponse.json(
+        { error: 'Task ID required' },
+        { status: 400 }
+      );
+    }
+
+    // Verify task belongs to user
+    const task = await prisma.taskHistory.findUnique({
+      where: { id: taskId },
+    });
+
+    if (!task || task.userId !== user.id) {
+      return NextResponse.json(
+        { error: 'Task not found' },
+        { status: 404 }
+      );
+    }
+
+    const updatedTask = await prisma.taskHistory.update({
+      where: { id: taskId },
+      data: { valueEarned: valueEarned || 0 },
+    });
+
+    return NextResponse.json(updatedTask);
+  } catch (error) {
+    console.error('Error updating task:', error);
+    return NextResponse.json(
+      { error: 'Failed to update task' },
       { status: 500 }
     );
   }

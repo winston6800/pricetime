@@ -7,6 +7,7 @@ import { FaMinus, FaPaperPlane, FaPlay, FaPause, FaPlus, FaSearch, FaChevronDown
 import { MdDelete } from "react-icons/md"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { fetchUserData, saveUserData, fetchTasks, createTask, deleteTask, fetchLoops, saveLoop, deleteLoop } from '@/lib/api-helpers';
+import OutcomesDashboard from '@/components/OutcomesDashboard';
 
 const formatTime = (seconds: number) => {
   const m = Math.floor(seconds / 60)
@@ -38,6 +39,7 @@ interface Task {
   timestamp: number
   duration?: number
   category: string
+  valueEarned?: number
 }
 
 // Memoized chart component to prevent unnecessary re-renders
@@ -323,6 +325,7 @@ export default function BurnEngine() {
   const [taskHistoryMinimized, setTaskHistoryMinimized] = useState<boolean>(false);
   const [loginStreak, setLoginStreak] = useState<number>(0);
   const [lastLoginDate, setLastLoginDate] = useState<string>("");
+  const [valueEarned, setValueEarned] = useState<string>("");
   const startTimeRef = useRef<number | null>(null);
 
   // Task History filters and sorting
@@ -335,16 +338,12 @@ export default function BurnEngine() {
   // Progress Dashboard
   const [timeframe, setTimeframe] = useState<"week" | "month">("week");
 
-  // On mount, load state from API (parallel loading for speed)
+  // On mount, load state from API
   useEffect(() => {
     async function loadData() {
       try {
-        // Load user data and tasks in parallel for faster initial load
-        const [userData, tasks] = await Promise.all([
-          fetchUserData(),
-          fetchTasks()
-        ]);
-        
+        // Load user data
+        const userData = await fetchUserData();
         setHourlyRate(userData.hourlyRate || 90);
         setCurrentTask(userData.currentTask || '');
         setCurrentTaskCategory(userData.category || 'rock');
@@ -362,14 +361,16 @@ export default function BurnEngine() {
           startTimeRef.current = Date.now() - (userData.timer * 1000);
         }
         
-        // Map tasks (limit to recent 200 for performance)
-        setTaskHistory(tasks.slice(0, 200).map((task: any) => ({
+        // Load task history
+        const tasks = await fetchTasks();
+        setTaskHistory(tasks.map((task: any) => ({
           id: task.id,
           name: task.name,
           amount: task.cost,
           timestamp: Number(task.timestamp),
           duration: task.duration,
           category: task.category,
+          valueEarned: task.valueEarned || 0,
         })));
         
         setHasLoaded(true);
@@ -463,6 +464,7 @@ export default function BurnEngine() {
           category: currentTaskCategory,
           cost: moneySpent,
           duration: timer,
+          valueEarned: valueEarned ? parseFloat(valueEarned) : 0,
         });
         
         // Reload task history
@@ -474,12 +476,14 @@ export default function BurnEngine() {
           timestamp: Number(task.timestamp),
           duration: task.duration,
           category: task.category,
+          valueEarned: task.valueEarned || 0,
         })));
       } catch (error) {
         console.error('Error finishing task:', error);
       }
     }
     setCurrentTask("");
+    setValueEarned("");
     setTimer(0);
     startTimeRef.current = Date.now();
     try {
@@ -668,47 +672,8 @@ export default function BurnEngine() {
     }
   }, [showMinerals, taskHistory, hourlyRate]);
 
-  // Loading skeleton for better perceived performance
-  if (!hasLoaded) {
-    return (
-      <div style={{ minHeight: "100vh", background: "#f8f9fa", padding: "2rem 1rem" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-          <div style={{ 
-            display: "flex", 
-            gap: 24, 
-            marginBottom: "2rem",
-            flexWrap: "wrap"
-          }}>
-            {/* Timer skeleton */}
-            <div style={{
-              flex: 1,
-              maxWidth: 400,
-              background: "#fff",
-              borderRadius: 12,
-              padding: 24,
-              boxShadow: "0 2px 12px #0001",
-            }}>
-              <div style={{ height: 20, background: "#e0e0e0", borderRadius: 4, marginBottom: 12, width: "60%" }}></div>
-              <div style={{ height: 40, background: "#e0e0e0", borderRadius: 4, marginBottom: 16 }}></div>
-              <div style={{ height: 60, background: "#e0e0e0", borderRadius: 4 }}></div>
-            </div>
-            {/* Chart skeleton */}
-            <div style={{
-              flex: 1,
-              maxWidth: 500,
-              background: "#fff",
-              borderRadius: 8,
-              padding: 16,
-              boxShadow: "0 1px 4px #0001",
-            }}>
-              <div style={{ height: 20, background: "#e0e0e0", borderRadius: 4, marginBottom: 12, width: "40%" }}></div>
-              <div style={{ height: 200, background: "#e0e0e0", borderRadius: 4 }}></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Optionally, render nothing until timer is loaded
+  if (!hasLoaded) return null;
 
   const toggleGroup = (group: string) => {
     setExpandedGroups(prev => {
@@ -914,6 +879,26 @@ export default function BurnEngine() {
               }}
             />
             <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>{formatTime(timer)}</span>
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ display: "block", fontSize: 12, color: "#666", marginBottom: 4 }}>
+              Value earned (optional)
+            </label>
+            <input
+              type="number"
+              value={valueEarned}
+              onChange={(e) => setValueEarned(e.target.value)}
+              placeholder="0.00"
+              step="0.01"
+              style={{
+                width: "100%",
+                padding: "6px 10px",
+                border: "1px solid #ddd",
+                borderRadius: 6,
+                fontSize: 14,
+                background: "#f5f5f5",
+              }}
+            />
           </div>
           <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
             <button
@@ -1266,6 +1251,7 @@ export default function BurnEngine() {
                                         timestamp: Number(t.timestamp),
                                         duration: t.duration,
                                         category: t.category,
+                                        valueEarned: t.valueEarned || 0,
                                       })));
                                     }
                                   } catch (error) {
@@ -1317,8 +1303,20 @@ export default function BurnEngine() {
         )}
       </div>
 
-      {/* Open Loops - At the bottom (per spec) */}
-      <OpenLoopsDashboard mainTaskActive={true} pauseMainTask={() => {}} />
+      {/* Open Loops and Outcomes Dashboard - Bottom row */}
+      <div style={{
+        display: "flex",
+        flexDirection: "row",
+        justifyContent: "center",
+        alignItems: "flex-start",
+        gap: 24,
+        maxWidth: 900,
+        margin: "2rem auto 0 auto",
+        flexWrap: "wrap",
+      }}>
+        <OpenLoopsDashboard mainTaskActive={true} pauseMainTask={() => {}} />
+        <OutcomesDashboard isPro={true} />
+      </div>
     </div>
   );
 }

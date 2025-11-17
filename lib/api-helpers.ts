@@ -46,7 +46,7 @@ export async function fetchTasks() {
   return res.json();
 }
 
-export async function createTask(task: { name: string; category: string; cost: string; duration: number }) {
+export async function createTask(task: { name: string; category: string; cost: string; duration: number; valueEarned?: number }) {
   const res = await fetch('/api/tasks', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -55,6 +55,19 @@ export async function createTask(task: { name: string; category: string; cost: s
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: 'Failed to create task' }));
     throw new Error(error.error || 'Failed to create task');
+  }
+  return res.json();
+}
+
+export async function updateTaskValue(taskId: string, valueEarned: number) {
+  const res = await fetch('/api/tasks', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId, valueEarned }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: 'Failed to update task value' }));
+    throw new Error(error.error || 'Failed to update task value');
   }
   return res.json();
 }
@@ -106,6 +119,39 @@ export async function deleteLoop(loopId: string) {
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: 'Failed to delete loop' }));
     throw new Error(error.error || 'Failed to delete loop');
+  }
+  return res.json();
+}
+
+export async function fetchIncomeEntries() {
+  const res = await fetch('/api/income');
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: 'Failed to fetch income entries' }));
+    throw new Error(error.error || 'Failed to fetch income entries');
+  }
+  return res.json();
+}
+
+export async function createIncomeEntry(amount: number, note?: string) {
+  const res = await fetch('/api/income', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount, note }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: 'Failed to create income entry' }));
+    throw new Error(error.error || 'Failed to create income entry');
+  }
+  return res.json();
+}
+
+export async function deleteIncomeEntry(entryId: string) {
+  const res = await fetch(`/api/income?id=${entryId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: 'Failed to delete income entry' }));
+    throw new Error(error.error || 'Failed to delete income entry');
   }
   return res.json();
 }

@@ -23,6 +23,7 @@ model User {
   userData    UserData?
   taskHistory TaskHistory[]
   openLoops   OpenLoop[]
+  incomeEntries IncomeEntry[]
   
   @@index([clerkId])
 }
@@ -49,6 +50,11 @@ model UserData {
   loginStreak   Int      @default(1)
   lastLoginDate String?  // Date string (local)
   
+  // Outcomes Dashboard (Pro feature)
+  goalTarget    Float?   // Target amount in dollars
+  goalMotivation String? // Short motivation text (e.g., "Retire Mom & Dad")
+  goalCreatedAt BigInt?  // UTC timestamp in milliseconds when goal was committed
+  
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
@@ -66,6 +72,7 @@ model TaskHistory {
   cost      String   // Money spent (formatted string)
   timestamp BigInt   // UTC timestamp in milliseconds
   duration  Int      // Duration in seconds
+  valueEarned Float  @default(0) // Value earned from this task (Pro feature)
   
   createdAt DateTime @default(now())
   
@@ -89,4 +96,20 @@ model OpenLoop {
   updatedAt DateTime @updatedAt
   
   @@index([userId])
+}
+
+// Manual income entries (Outcomes Dashboard)
+model IncomeEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  amount    Float    // Amount in dollars
+  note      String?  // Optional note/description
+  timestamp BigInt   // UTC timestamp in milliseconds
+  
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+  @@index([timestamp])
 }

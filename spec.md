@@ -146,6 +146,42 @@ Category selected before/during task, saved with task in history.
 - **Display**: Shows when task history is expanded, collapses with history
 - **Data aggregation**: Automatically groups tasks by selected timeframe, calculates totals and averages
 
+### Outcomes Dashboard (Pro Feature)
+- **Purpose**: Track money earned toward life-changing goals (e.g., retire parents, fund a trip).
+- **Placement**: Bottom of page, to the right of Open Loops section (maintains design hierarchy).
+- **Period Tracking**: Days since goal was committed (not weekly/monthly).
+- **Data Sources**:
+  - Task value earned: Optional field when finishing a task (defaults to $0, editable from task history).
+  - Manual income entries: User can add money directly with confirmation dialog.
+  - Future: Bank connection (Plaid) for auto-sync (Pro feature).
+- **Logic**:
+  - When goal is saved, store `goalCreatedAt` timestamp (UTC milliseconds).
+  - Calculate days since goal creation = (current time - goalCreatedAt) / (24 * 60 * 60 * 1000).
+  - Calculate total earned = sum of task valueEarned + manual income entries since goal creation.
+  - Goal progress = (total earned / goal target) × 100.
+  - Remaining = goal target - total earned.
+  - Effective hourly rate = total earned ÷ total tracked hours since goal creation.
+  - Top-valued task = task with highest valueEarned since goal creation.
+- **Manual Entry Flow**:
+  1. User clicks "Add Money" button.
+  2. Modal opens with amount input and optional note.
+  3. User enters amount, clicks "Confirm".
+  4. Confirmation dialog shows: "Add $X to your goal? This will update your progress."
+  5. User confirms → entry saved, dashboard updates immediately.
+  6. User cancels → no entry created.
+- **Goal Setup**:
+  - If no goal exists: Show "Set a money goal" CTA.
+  - Goal modal: Target amount, motivation text.
+  - Save goal → stores target, motivation, and `goalCreatedAt` timestamp in UserData table.
+  - When goal is saved, `goalCreatedAt` is set to current timestamp.
+- **Display Logic**:
+  - Show "Day X" where X = days since goal creation (rounded down).
+  - Large earnings figure: Total earned since goal creation.
+  - Progress bar: Visual representation of earned vs target.
+  - Motivation text: Shows goal "Why" if set.
+  - Quick stats: Effective hourly rate, top-valued task name + amount.
+  - Empty state: "Track the money that retires your parents, pays off debt, or takes her abroad."
+
 ### Open Loops (Distractions)
 - **Placement**: At the bottom, after Task History and Progress Dashboard (secondary feature, less prominent)
 - **Default state**: Collapsed/minimized by default to minimize distractions
@@ -154,6 +190,79 @@ Category selected before/during task, saved with task in history.
 - Each loop has: name, timer, cost ($1000/hr default), play/pause button
 - Only one loop active at a time (pauses main task when active)
 - Checkbox removes loop from list
+
+- **Access**: Pro users only (show upgrade prompt for free users)
+- **Purpose**: Connect time spent to money earned and personal goals
+
+**Layout (Single Card):**
+- White card, subtle shadow, matches existing card style
+- Padding: 24px vertical, 32px horizontal
+- Clean spacing, no visual clutter
+
+**Earnings Display:**
+- **Large number**: Gross earned this period (week/month toggle)
+  - Font: 48px, bold, green (#27ae60) for positive, gray (#95a5a6) if $0
+  - Label above: "Earned" (12px, gray #7f8c8d)
+  - Calculated from sum of `valueEarned` field from completed tasks in selected period
+- **Period toggle**: Small toggle button (Week/Month) below earnings number
+  - Default: Week
+  - Style: Subtle gray buttons, active state blue (#3498db)
+
+**Goal Progress:**
+- **Progress bar**: Horizontal bar below earnings
+  - Height: 8px, rounded corners
+  - Background: light gray (#ecf0f1)
+  - Fill: blue (#3498db) showing progress percentage
+  - Width: 100% of card
+- **Goal text**: Two lines below progress bar
+  - Line 1: "Target: $X,XXX" (14px, gray #7f8c8d)
+  - Line 2: "Remaining: $X,XXX" (14px, gray #7f8c8d)
+  - If goal met: "Target reached!" (green #27ae60)
+- **Personal "Why" label**: Subtle text above goal progress
+  - Format: "For: [user's goal text]" (12px, italic, gray #95a5a6)
+  - Examples: "For: Retire Mom & Dad", "For: Paris trip with Ana"
+  - Only shows if goal is set
+
+**Quick Stats (Minimal Row):**
+- Two small pills below goal, side-by-side
+- **Effective hourly rate**: "Avg: $XXX/hr" (12px, gray #7f8c8d)
+  - Calculated: total earned ÷ total hours worked in period
+- **Top task**: "Best: [task name]" (12px, gray #7f8c8d, truncated if long)
+  - Shows task with highest `valueEarned` in period
+- Spacing: 16px gap between pills
+
+**Goal Setup:**
+- **Empty state**: If no goal set, show "Set your goal" button (blue, subtle)
+- **Setup modal**: Simple form (overlay, centered)
+  - Field 1: "What are you working toward?" (textarea, 1-2 lines)
+    - Placeholder: "Retire parents. Pay off debt. Take her abroad."
+  - Field 2: "Target amount" (number input, $ prefix)
+  - Field 3: "Period" (Week/Month radio buttons)
+  - "Save Goal" button (blue, primary)
+- **Edit goal**: Click anywhere on goal section → opens setup modal with current values
+
+**Task Value Input:**
+- **When finishing task**: Optional field appears in finish task flow
+  - Label: "Value earned (optional)" (12px, gray)
+  - Input: Number field, $ prefix, placeholder "$0"
+  - Small helper text: "Feeds: [goal text]" if goal exists (10px, gray, italic)
+  - Default: $0 (task still saves if left blank)
+- **Edit later**: In Task History, click task → edit modal includes value field
+- **Value stored**: Saved in `TaskHistory.valueEarned` field
+
+**Visual Hierarchy:**
+- Earnings number: Most prominent (48px)
+- Goal progress: Secondary (visual bar + text)
+- Quick stats: Tertiary (small, subtle)
+- Personal "why": Subtle reminder (italic, light gray)
+
+**Design Principles:**
+- Single card, no nested sections
+- Generous whitespace (24px vertical padding)
+- No borders except card shadow
+- Typography hierarchy: 48px → 14px → 12px → 10px
+- Colors: Green for earnings, blue for progress, gray for text
+- Mobile: Card stacks, stats wrap to two rows if needed
 
 ---
 
@@ -182,7 +291,9 @@ Category selected before/during task, saved with task in history.
 1. Enter task name, select category
 2. Timer runs automatically (starts when task entered)
 3. See money spent increase in real-time
-4. Click "Finish Task" → saves to history, resets timer, ready for next task
+4. Click "Finish Task" → optional "Value earned" field appears (Pro users)
+5. Enter value (or skip) → saves to history, resets timer, ready for next task
+6. Outcomes Dashboard updates automatically (Pro users)
 
 
 ### Login Streak
@@ -190,6 +301,19 @@ Category selected before/during task, saved with task in history.
 - Consecutive day → increment streak
 - Gap > 1 day → reset to 1
 - Show badge if streak > 0
+
+### Outcomes Dashboard Setup (Pro Users)
+1. User upgrades to Pro (or already Pro)
+2. Sees Outcomes Dashboard above timer
+3. If no goal set: clicks "Set your goal" button
+4. Modal opens with three fields:
+   - "What are you working toward?" (textarea with examples)
+   - "Target amount" (number input)
+   - "Period" (Week/Month)
+5. User fills form, clicks "Save Goal"
+6. Dashboard updates immediately showing goal progress
+7. When finishing tasks, optional "Value earned" field appears
+8. User enters value (or skips), dashboard recalculates automatically
 
 ---
 
@@ -231,8 +355,9 @@ Category selected before/during task, saved with task in history.
 **Database schema (Prisma):**
 - `User` table: `id` (Clerk user ID, primary key), `createdAt`, `updatedAt`
 - `UserData` table: `userId` (foreign key), hourly rate, current task, category, timer (seconds), UI preferences, login streak, last login date
-- `TaskHistory` table: `id`, `userId`, name, category, cost, timestamp, duration
+- `TaskHistory` table: `id`, `userId`, name, category, cost, timestamp, duration, `valueEarned` (decimal, nullable, default 0)
 - `OpenLoop` table: `id`, `userId`, name, timer, rate, active state
+- `Goal` table: `id`, `userId`, `goalText` (text, nullable), `targetAmount` (decimal), `period` (enum: Week/Month), `createdAt`, `updatedAt` (one goal per user, latest is active)
 
 **Data flow:**
 - Client → API route → Prisma → Neon database
@@ -246,6 +371,10 @@ Category selected before/during task, saved with task in history.
 - **Money spent** = (timer seconds ÷ 3600) × hourly rate
 - **Per minute** = hourly rate ÷ 60
 - **Per second** = hourly rate ÷ 3600
+- **Gross earned** = Sum of `valueEarned` from all tasks in selected period (week/month)
+- **Effective hourly rate** = Total earned ÷ Total hours worked in period
+- **Goal progress** = (Gross earned ÷ Target amount) × 100 (capped at 100%)
+- **Remaining** = Target amount - Gross earned (if positive, else 0)
 - Round to 2 decimals, display with $ prefix
 
 ---
@@ -260,6 +389,10 @@ Category selected before/during task, saved with task in history.
 - Multiple tabs → sync via database (real-time updates via polling or websockets later)
 - User not authenticated → redirect to sign-in
 - Database connection fails → show error, allow retry
+- No goal set → Outcomes Dashboard shows "Set your goal" button, earnings still calculated
+- Task with $0 value → Still counts toward hours worked for effective rate calculation
+- Goal period change → Recalculates progress based on new period's earnings
+- Free user views Outcomes Dashboard → Show upgrade prompt with Pro benefits
 
 ---
 
@@ -304,6 +437,7 @@ Category selected before/during task, saved with task in history.
 - Advanced analytics (weekly/monthly reports, time breakdowns)
 - Priority support
 - Custom hourly rates per category
+- **Outcomes Dashboard** (earnings tracking, goal progress, effective hourly rate)
 - **Value prop:** "Save 2+ hours/day = $180+ value. Pro costs $9/month."
 
 **Pricing Logic:**
@@ -338,8 +472,9 @@ Category selected before/during task, saved with task in history.
 
 **API Routes:**
 - `/api/data` - GET (load user data), POST (save user data)
-- `/api/tasks` - GET (load history), POST (finish task), DELETE (remove task)
+- `/api/tasks` - GET (load history), POST (finish task), DELETE (remove task), PATCH (update task value)
 - `/api/loops` - GET (load open loops), POST (add/update loop), DELETE (remove loop)
+- `/api/goals` - GET (load active goal), POST (create/update goal), DELETE (remove goal)
 - All routes: verify `userId` from Clerk, filter queries by `userId`
 
 **State Management:**
@@ -355,7 +490,7 @@ Category selected before/during task, saved with task in history.
 
 **v1 (current):** Landing page, auth, main timer, categories, chart, open loops, history, streaks, database
 
-**v1.1:** Export/import JSON, custom rates per category, time goals, real-time sync
+**v1.1:** Export/import JSON, custom rates per category, time goals, real-time sync, **Outcomes Dashboard (Pro)**
 
 **v1.2:** Multi-device sync improvements, weekly/monthly reports, data analytics
 

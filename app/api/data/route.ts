@@ -32,7 +32,7 @@ export async function GET() {
       });
     }
 
-    // Update login streak (only if date changed, avoid unnecessary writes)
+    // Update login streak
     const currentDate = new Date().toDateString();
     if (userData.lastLoginDate !== currentDate) {
       const lastLoginTime = userData.lastLoginDate 
@@ -44,28 +44,22 @@ export async function GET() {
       let newStreak = 1;
       if (daysDiff === 1) {
         newStreak = userData.loginStreak + 1;
-      } else if (daysDiff > 1) {
-        newStreak = 1; // Reset streak if gap > 1 day
-      } else {
-        newStreak = userData.loginStreak; // Same day, keep streak
       }
       
-      // Only update if streak actually changed
-      if (newStreak !== userData.loginStreak || userData.lastLoginDate !== currentDate) {
-        userData = await prisma.userData.update({
-          where: { userId: user.id },
-          data: {
-            loginStreak: newStreak,
-            lastLoginDate: currentDate,
-          },
-        });
-      }
+      userData = await prisma.userData.update({
+        where: { userId: user.id },
+        data: {
+          loginStreak: newStreak,
+          lastLoginDate: currentDate,
+        },
+      });
     }
 
     // Convert BigInt to string for JSON serialization
     const userDataResponse = {
       ...userData,
       timerStartTime: userData.timerStartTime ? userData.timerStartTime.toString() : null,
+      goalCreatedAt: userData.goalCreatedAt ? userData.goalCreatedAt.toString() : null,
     };
     
     return NextResponse.json(userDataResponse);
@@ -88,18 +82,27 @@ export async function POST(request: NextRequest) {
     const user = await requireAuth();
     const data = await request.json();
 
+    // Build update object only with provided fields
+    const updateData: any = {};
+    if (data.hourlyRate !== undefined) updateData.hourlyRate = data.hourlyRate;
+    if (data.currentTask !== undefined) updateData.currentTask = data.currentTask;
+    if (data.category !== undefined) updateData.category = data.category;
+    if (data.timer !== undefined) updateData.timer = data.timer;
+    if (data.timerStartTime !== undefined) {
+      updateData.timerStartTime = data.timerStartTime ? BigInt(data.timerStartTime) : null;
+    }
+    if (data.showMinerals !== undefined) updateData.showMinerals = data.showMinerals;
+    if (data.taskHistoryMinimized !== undefined) updateData.taskHistoryMinimized = data.taskHistoryMinimized;
+    if (data.openLoopsMinimized !== undefined) updateData.openLoopsMinimized = data.openLoopsMinimized;
+    if (data.goalTarget !== undefined) updateData.goalTarget = data.goalTarget;
+    if (data.goalMotivation !== undefined) updateData.goalMotivation = data.goalMotivation;
+    if (data.goalCreatedAt !== undefined) {
+      updateData.goalCreatedAt = data.goalCreatedAt ? BigInt(data.goalCreatedAt) : null;
+    }
+
     const userData = await prisma.userData.upsert({
       where: { userId: user.id },
-      update: {
-        hourlyRate: data.hourlyRate ?? undefined,
-        currentTask: data.currentTask ?? undefined,
-        category: data.category ?? undefined,
-        timer: data.timer ?? undefined,
-        timerStartTime: data.timerStartTime ? BigInt(data.timerStartTime) : undefined,
-        showMinerals: data.showMinerals ?? undefined,
-        taskHistoryMinimized: data.taskHistoryMinimized ?? undefined,
-        openLoopsMinimized: data.openLoopsMinimized ?? undefined,
-      },
+      update: updateData,
       create: {
         userId: user.id,
         hourlyRate: data.hourlyRate ?? 90,
@@ -112,6 +115,9 @@ export async function POST(request: NextRequest) {
         openLoopsMinimized: data.openLoopsMinimized ?? false,
         loginStreak: 1,
         lastLoginDate: new Date().toDateString(),
+        goalTarget: data.goalTarget ?? null,
+        goalMotivation: data.goalMotivation ?? null,
+        goalCreatedAt: data.goalCreatedAt ? BigInt(data.goalCreatedAt) : null,
       },
     });
 
@@ -119,6 +125,7 @@ export async function POST(request: NextRequest) {
     const userDataResponse = {
       ...userData,
       timerStartTime: userData.timerStartTime ? userData.timerStartTime.toString() : null,
+      goalCreatedAt: userData.goalCreatedAt ? userData.goalCreatedAt.toString() : null,
     };
     
     return NextResponse.json(userDataResponse);
