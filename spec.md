@@ -176,8 +176,11 @@ Category selected before/during task, saved with task in history.
   - When goal is saved, `goalCreatedAt` is set to current timestamp.
 - **Display Logic**:
   - Show "Day X" where X = days since goal creation (rounded down).
-  - Large earnings figure: Total earned since goal creation.
-  - Progress bar: Visual representation of earned vs target.
+  - Large earnings figure: Total earned since goal creation, formatted with shorthand for readability:
+    - < $1,000: Show as "$XXX.XX" (2 decimals)
+    - $1,000 - $999,999: Show as "$XK" (rounded to nearest thousand, no decimals)
+    - ≥ $1,000,000: Show as "$X.XM" (1 decimal place)
+  - Progress bar: Visual representation of earned vs target (both use same formatting).
   - Motivation text: Shows goal "Why" if set.
   - Quick stats: Effective hourly rate, top-valued task name + amount.
   - Empty state: "Track the money that retires your parents, pays off debt, or takes her abroad."

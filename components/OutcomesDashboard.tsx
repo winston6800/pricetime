@@ -8,6 +8,17 @@ interface OutcomesDashboardProps {
   isPro?: boolean // For now, we'll show it to everyone, gate later
 }
 
+// Format large numbers with shorthand (e.g., $50K, $1.2M)
+const formatMoney = (amount: number): string => {
+  if (amount >= 1000000) {
+    return `$${(amount / 1000000).toFixed(1)}M`
+  } else if (amount >= 1000) {
+    return `$${(amount / 1000).toFixed(0)}K`
+  } else {
+    return `$${amount.toFixed(2)}`
+  }
+}
+
 export default function OutcomesDashboard({ isPro = true }: OutcomesDashboardProps) {
   const [goalTarget, setGoalTarget] = useState<number | null>(null)
   const [goalMotivation, setGoalMotivation] = useState<string>("")
@@ -252,7 +263,7 @@ export default function OutcomesDashboard({ isPro = true }: OutcomesDashboardPro
               textAlign: "center",
               marginBottom: 12,
             }}>
-              ${earningsData.totalEarned.toFixed(2)}
+              {formatMoney(earningsData.totalEarned)}
             </div>
 
             {/* Goal progress bar */}
@@ -260,7 +271,7 @@ export default function OutcomesDashboard({ isPro = true }: OutcomesDashboardPro
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                 <span style={{ fontSize: 12, color: "#666" }}>Earned vs Target</span>
                 <span style={{ fontSize: 12, color: "#666", fontWeight: 600 }}>
-                  ${earningsData.totalEarned.toFixed(2)} / ${goalTarget?.toFixed(2)}
+                  {formatMoney(earningsData.totalEarned)} / {goalTarget ? formatMoney(goalTarget) : '$0'}
                 </span>
               </div>
               <div style={{
@@ -278,7 +289,7 @@ export default function OutcomesDashboard({ isPro = true }: OutcomesDashboardPro
                 }} />
               </div>
               <div style={{ fontSize: 11, color: "#666", marginTop: 4 }}>
-                ${remaining.toFixed(2)} remaining
+                {formatMoney(remaining)} remaining
               </div>
             </div>
 
