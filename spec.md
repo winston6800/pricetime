@@ -58,6 +58,7 @@ A productivity timer that makes the cost of time visible. Users set an hourly ra
 
 ### 2. Authentication (`/sign-in`, `/sign-up`)
 - **Sign up/Sign in:** Clerk handles all auth (email/password, OAuth)
+- **Homepage button:** Top-left corner, dark gray button with home icon + "Home" text, links to landing page (`/`)
 - **After successful auth:** Redirect to main app (`/app`)
 - **First-time users:** Initialize with defaults (hourly rate $90, empty state)
 - **Returning users:** Load existing data from database
