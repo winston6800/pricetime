@@ -7,7 +7,7 @@
         "build": "next build",
         "start": "next start",
         "lint": "next lint",
-        "postinstall": "cross-env PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 prisma generate"
+        "postinstall": "node scripts/postinstall.js"
     },
     "dependencies": {
         "@clerk/nextjs": "^6.35.0",
