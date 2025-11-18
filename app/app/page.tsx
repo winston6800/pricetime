@@ -17,6 +17,16 @@ const formatTime = (seconds: number) => {
   return `${m}:${s}`
 }
 
+const formatTimestamp = (timestamp: number) => {
+  return new Date(timestamp).toLocaleString(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
 interface OpenLoop {
   id: number
   name: string
@@ -1284,7 +1294,7 @@ export default function BurnEngine() {
                                 ${task.amount}
                               </span>
                               <span style={{ color: "#888", fontSize: 12, marginTop: 2 }}>
-                                {new Date(task.timestamp).toISOString().replace('T', ' ').slice(0, 16)}
+                                {formatTimestamp(Number(task.timestamp))}
                                 {typeof task.duration === 'number' && (
                                   <span style={{ marginLeft: 8, color: '#3498db' }}>
                                     • {Math.floor(task.duration / 60)}m {(task.duration % 60).toString().padStart(2, '0')}s

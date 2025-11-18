@@ -135,6 +135,7 @@ Category selected before/during task, saved with task in history.
   - Date headers are prominent
   - Tasks within each day are clearly grouped
   - Category badges are color-coded and visible
+- **Timestamps**: Auto-detected from user's local timezone (browser locale). Future settings override planned.
 - **Quick stats per day**: When date group is expanded, show daily totals (tasks, time, cost) for that day
 
 ### Progress Dashboard (Task History Insights)
