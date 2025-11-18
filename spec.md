@@ -496,6 +496,80 @@ Category selected before/during task, saved with task in history.
 
 ---
 
+## Security & Protection
+
+**Authentication & Authorization:**
+- All API routes (except public endpoints) must call `requireAuth()` from `@clerk/nextjs` to verify user identity
+- Never trust client-provided `userId` - always get it from `requireAuth()` in API routes
+- Protected routes: `/app`, `/api/*` (except public health checks)
+- Public routes: `/`, `/sign-in`, `/sign-up`, `/pricing`
+- Middleware: Clerk middleware automatically protects routes based on path patterns
+
+**Data Isolation:**
+- All database queries MUST filter by `userId` from authenticated session
+- Never query data without `userId` filter (prevents cross-user data access)
+- Example: `prisma.taskHistory.findMany({ where: { userId: user.id } })`
+- Verify ownership before UPDATE/DELETE: Check task/entry belongs to user before allowing modification
+
+**Input Validation & Sanitization:**
+- Server-side validation required for all user inputs (never trust client)
+- Task names: Max length 500 chars, trim whitespace, reject empty strings (allow "Untitled" as fallback)
+- Category values: Must be exactly "rock", "pebble", or "sand" (case-sensitive, reject invalid values)
+- Hourly rate: Must be positive number, max 1,000,000 (prevent overflow), default to 90 if invalid
+- Money amounts: Must be positive number, max 10,000,000 (prevent overflow), round to 2 decimals
+- Timestamps: Validate BigInt values are within reasonable range (not negative, not future beyond 1 day)
+- Text fields: Trim whitespace, limit length (motivation: 200 chars, notes: 500 chars)
+
+**Rate Limiting:**
+- API routes: Implement rate limiting to prevent abuse
+  - Authenticated endpoints: 60 requests per minute per user
+  - Sign-up endpoint: 5 requests per hour per IP (prevent spam accounts)
+  - Task creation: 100 tasks per hour per user (reasonable limit)
+  - Income entry: 50 entries per hour per user
+- Use Vercel Edge Middleware or upstream WAF for rate limiting
+- Return 429 status with "Rate limit exceeded" message when limit hit
+
+**Error Handling:**
+- Never expose database errors, stack traces, or internal details to clients
+- Log errors server-side (use structured logging service like Sentry in production)
+- Return generic error messages: "Failed to save task" instead of "Prisma error: ..."
+- Handle edge cases gracefully: Invalid data → return 400 with clear message, don't crash
+- Network errors: Show user-friendly message, allow retry
+
+**Secrets & Environment Variables:**
+- All secrets (DATABASE_URL, Clerk keys) stored in environment variables only
+- Never commit secrets to git (use `.env.local` for local, Vercel env vars for production)
+- Use different keys for dev/staging/production
+- Rotate keys periodically (especially if exposed or compromised)
+
+**Data Validation Logic (by feature):**
+- **Task creation:** Validate name (max 500 chars), category (rock/pebble/sand), duration (non-negative), cost (positive number)
+- **Task update:** Validate category change is valid enum, verify task ownership before update
+- **Income entry:** Validate amount (positive, max 10M), note (max 500 chars, optional)
+- **Goal setup:** Validate target (positive number, max 10M), motivation (max 200 chars, optional), period (weekly/monthly if used)
+- **User data:** Validate hourly rate (positive, max 1M), timer values (non-negative integers)
+
+**Security Testing Checklist:**
+- [ ] All API routes require authentication
+- [ ] All queries filter by userId
+- [ ] Input validation on all user inputs
+- [ ] Rate limiting implemented
+- [ ] Error messages don't leak internal details
+- [ ] Secrets not in codebase
+- [ ] HTTPS enforced (Vercel handles this)
+- [ ] SQL injection prevented (Prisma parameterized queries)
+- [ ] XSS prevented (React auto-escapes, but validate inputs anyway)
+
+**Future Security Enhancements:**
+- Add request signing for critical operations (e.g., goal updates, income entries)
+- Implement audit logging for sensitive actions (who changed what, when)
+- Add 2FA option for Pro users
+- Regular security audits and dependency updates
+- Content Security Policy (CSP) headers
+- CORS configuration for API endpoints
+
+---
+
 ## Roadmap
 
 **v1 (current):** Landing page, auth, main timer, categories, chart, open loops, history, streaks, database
