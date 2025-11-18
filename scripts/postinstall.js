@@ -4,7 +4,14 @@
 const { execSync } = require('child_process');
 
 // Set a dummy DATABASE_URL if not provided (Prisma needs it to parse schema, but won't connect during generate)
-const databaseUrl = process.env.DATABASE_URL || 'postgresql://dummy:dummy@localhost:5432/dummy';
+const originalDatabaseUrl = process.env.DATABASE_URL;
+const databaseUrl = originalDatabaseUrl || 'postgresql://dummy:dummy@localhost:5432/dummy';
+
+if (!originalDatabaseUrl) {
+  console.log('⚠️  DATABASE_URL not found in environment, using dummy URL for Prisma generation');
+} else {
+  console.log('✅ DATABASE_URL found in environment');
+}
 
 process.env.DATABASE_URL = databaseUrl;
 process.env.PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING = '1';
