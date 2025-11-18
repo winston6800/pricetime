@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { FaMinus, FaPaperPlane, FaPlay, FaPause, FaPlus, FaSearch, FaChevronDown, FaChevronUp, FaSignOutAlt } from "react-icons/fa"
 import { MdDelete } from "react-icons/md"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { fetchUserData, saveUserData, fetchTasks, createTask, deleteTask, fetchLoops, saveLoop, deleteLoop } from '@/lib/api-helpers';
+import { fetchUserData, saveUserData, fetchTasks, createTask, deleteTask, fetchLoops, saveLoop, deleteLoop, updateTask } from '@/lib/api-helpers';
 import OutcomesDashboard from '@/components/OutcomesDashboard';
 
 const formatTime = (seconds: number) => {
@@ -326,6 +326,8 @@ export default function BurnEngine() {
   const [loginStreak, setLoginStreak] = useState<number>(0);
   const [lastLoginDate, setLastLoginDate] = useState<string>("");
   const [valueEarned, setValueEarned] = useState<string>("");
+  const [categoryEditTaskId, setCategoryEditTaskId] = useState<string | null>(null);
+  const [categoryEditValue, setCategoryEditValue] = useState<string>("rock");
   const startTimeRef = useRef<number | null>(null);
 
   // Task History filters and sorting
@@ -494,6 +496,28 @@ export default function BurnEngine() {
       });
     } catch (error) {
       console.error('Error saving after finish task:', error);
+    }
+  };
+
+  const handleCategoryChange = async (taskId: string, newCategory: string) => {
+    if (!taskId) return;
+    setCategoryEditValue(newCategory);
+    try {
+      await updateTask(taskId, { category: newCategory });
+      const tasks = await fetchTasks();
+      setTaskHistory(tasks.map((task: any) => ({
+        id: task.id,
+        name: task.name,
+        amount: task.cost,
+        timestamp: Number(task.timestamp),
+        duration: task.duration,
+        category: task.category,
+        valueEarned: task.valueEarned || 0,
+      })));
+    } catch (error) {
+      console.error('Error updating task category:', error);
+    } finally {
+      setCategoryEditTaskId(null);
     }
   };
 
@@ -1210,21 +1234,51 @@ export default function BurnEngine() {
                                 position: "relative",
                               }}
                             >
-                              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
                                 <span style={{ fontWeight: 500, fontSize: 14 }}>{task.name || <em>Untitled</em>}</span>
-                                <span
-                                  style={{
-                                    padding: "2px 6px",
-                                    borderRadius: 4,
-                                    fontSize: 10,
-                                    fontWeight: 600,
-                                    textTransform: "uppercase",
-                                    background: task.category === "rock" ? "#e74c3c" : task.category === "pebble" ? "#f39c12" : "#95a5a6",
-                                    color: "#fff",
-                                  }}
-                                >
-                                  {task.category}
-                                </span>
+                                {categoryEditTaskId === task.id ? (
+                                  <select
+                                    value={categoryEditValue}
+                                    onChange={(e) => task.id && handleCategoryChange(task.id, e.target.value)}
+                                    onBlur={() => setCategoryEditTaskId(null)}
+                                    style={{
+                                      borderRadius: 4,
+                                      border: "1px solid #ccc",
+                                      padding: "2px 4px",
+                                      fontSize: 12,
+                                      fontWeight: 600,
+                                      textTransform: "uppercase",
+                                      background: "#fff",
+                                      color: "#333",
+                                    }}
+                                  >
+                                    <option value="rock">Rock</option>
+                                    <option value="pebble">Pebble</option>
+                                    <option value="sand">Sand</option>
+                                  </select>
+                                ) : (
+                                  <span
+                                    style={{
+                                      padding: "2px 6px",
+                                      borderRadius: 4,
+                                      fontSize: 10,
+                                      fontWeight: 600,
+                                      textTransform: "uppercase",
+                                      background: task.category === "rock" ? "#e74c3c" : task.category === "pebble" ? "#f39c12" : "#95a5a6",
+                                      color: "#fff",
+                                      cursor: task.id ? "pointer" : "default",
+                                    }}
+                                    title={task.id ? "Click to change category" : undefined}
+                                    onClick={() => {
+                                      if (task.id) {
+                                        setCategoryEditTaskId(task.id);
+                                        setCategoryEditValue(task.category);
+                                      }
+                                    }}
+                                  >
+                                    {task.category}
+                                  </span>
+                                )}
                               </div>
                               <span style={{ color: "#e74c3c", fontWeight: 700, fontVariantNumeric: "tabular-nums", marginLeft: 0, fontSize: 14 }}>
                                 ${task.amount}

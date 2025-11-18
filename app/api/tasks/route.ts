@@ -72,7 +72,7 @@ export async function GET() {
 export async function PATCH(request: NextRequest) {
   try {
     const user = await requireAuth();
-    const { taskId, valueEarned } = await request.json();
+    const { taskId, valueEarned, category } = await request.json();
 
     if (!taskId) {
       return NextResponse.json(
@@ -93,12 +93,37 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    const updateData: any = {};
+    if (valueEarned !== undefined) {
+      updateData.valueEarned = valueEarned || 0;
+    }
+    if (category) {
+      const allowedCategories = ['rock', 'pebble', 'sand'];
+      if (!allowedCategories.includes(category)) {
+        return NextResponse.json(
+          { error: 'Invalid category' },
+          { status: 400 }
+        );
+      }
+      updateData.category = category;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json(
+        { error: 'No valid fields to update' },
+        { status: 400 }
+      );
+    }
+
     const updatedTask = await prisma.taskHistory.update({
       where: { id: taskId },
-      data: { valueEarned: valueEarned || 0 },
+      data: updateData,
     });
 
-    return NextResponse.json(updatedTask);
+    return NextResponse.json({
+      ...updatedTask,
+      timestamp: updatedTask.timestamp.toString(),
+    });
   } catch (error) {
     console.error('Error updating task:', error);
     return NextResponse.json(

@@ -59,15 +59,15 @@ export async function createTask(task: { name: string; category: string; cost: s
   return res.json();
 }
 
-export async function updateTaskValue(taskId: string, valueEarned: number) {
+export async function updateTask(taskId: string, payload: { valueEarned?: number; category?: string }) {
   const res = await fetch('/api/tasks', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ taskId, valueEarned }),
+    body: JSON.stringify({ taskId, ...payload }),
   });
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Failed to update task value' }));
-    throw new Error(error.error || 'Failed to update task value');
+    const error = await res.json().catch(() => ({ error: 'Failed to update task' }));
+    throw new Error(error.error || 'Failed to update task');
   }
   return res.json();
 }

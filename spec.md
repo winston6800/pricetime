@@ -44,7 +44,7 @@ A productivity timer that makes the cost of time visible. Users set an hourly ra
 **Final CTA section:**
 - "Stop guessing. Start tracking."
 - "Get Started" button
-- "Free forever. No credit card."
+- "No credit card required to start."
 
 **Navigation:**
 - Top right: "Sign In" link (subtle, for returning users)
@@ -115,7 +115,12 @@ Category selected before/during task, saved with task in history.
 - **Collapsible date groups**: Each date group can be expanded/collapsed
 - **Task entry**: Each task shows:
   - Name, category badge (Rock/Pebble/Sand), cost, timestamp, duration
+  - Edit category button: Click category badge or edit icon to change task type (Rock/Pebble/Sand)
   - Delete button per task
+- **Edit category logic**:
+  - Click category badge or edit icon → dropdown appears with Rock/Pebble/Sand options
+  - Select new category → task updates immediately, badge color changes
+  - Category change updates task in database, recalculates category breakdowns in Progress Dashboard
 - **Search/filter**: 
   - Search by task name
   - Filter by category (All, Rock, Pebble, Sand)

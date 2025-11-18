@@ -364,7 +364,7 @@ export default function LandingPage() {
           fontSize: '15px', 
           color: '#888'
         }}>
-          Free forever. No credit card.
+          No credit card required to start.
         </p>
       </section>
 
