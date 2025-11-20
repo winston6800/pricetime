@@ -509,6 +509,18 @@ Category selected before/during task, saved with task in history.
 - Stripe customer ID stored securely, never exposed to client
 - Environment variables: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`
 
+**Webhook Setup (Production):**
+1. **Create webhook in Stripe Dashboard:**
+   - Go to Developers → Webhooks → Add endpoint
+   - Endpoint URL: `https://your-domain.vercel.app/api/stripe/webhook` (NOT `/app`)
+   - Events from: "Your account"
+   - Destination type: "Webhook endpoint"
+   - Select events: `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`
+   - Copy the webhook signing secret (starts with `whsec_...`)
+2. **Add to Vercel environment variables:**
+   - `STRIPE_WEBHOOK_SECRET` = the `whsec_...` value from step 1
+3. **Important:** Webhook URL must point to `/api/stripe/webhook` (API route), not `/app` (page route)
+
 **UI Elements:**
 - Upgrade button in header (shown for free users)
 - **Pro badge** in header (purple gradient badge showing "Pro" for active subscribers)
@@ -543,11 +555,23 @@ Category selected before/during task, saved with task in history.
 - All routes: verify `userId` from Clerk, filter queries by `userId`
 
 **State Management:**
-- Client: React hooks + API calls (no localStorage)
-- Timer: perpetually running, updates every second on screen, saves to database every 10 seconds
-- Data saves: debounced 2 seconds for user settings, 10 seconds for timer
+- Client: React hooks + API helpers with localStorage caching for timer state, open loops, and task history snapshots (sync on interval and on focus)
+- Timer: perpetually running client-side, updates every second on screen, syncs to database every 30–60 seconds (or on explicit events) with `timerStartTime` persistence
+- Data saves: minimum 5 second debounce for settings, requests coalesced/batched, skip server writes when values unchanged, queue retries when offline
 - Chart: Recharts library, memoize to prevent re-renders
 - Prisma logging: errors only (no query logs to reduce console spam)
+
+---
+
+## Scalability & Data Persistence
+
+To stay within Vercel’s hobby quotas (<2k server invocations per heavy user per month) while keeping the timer reliable:
+
+- **Timer durability:** Auto-save fires every 30–60 seconds, on finish/reset events, before unload, and only when `timer` or `timerStartTime` changes.
+- **Idle/tab awareness:** Page Visibility + BroadcastChannel ensure only the foreground tab performs writes; idle sessions (>5 minutes inactive) pause sync until resumed.
+- **Local-first cache:** All key state persists locally first, then syncs in the background with batching and exponential backoff if offline.
+- **Client rate limiting:** UI prevents more than 60 authenticated writes per minute per user (aligned with server limits) and surfaces warnings when throttled.
+- **Monitoring hooks:** API helpers log per-user request counts/latency to support alerts as we approach plan ceilings.
 
 ---
 

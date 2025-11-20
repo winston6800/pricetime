@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useMemo, memo } from "react"
+import { useState, useRef, useEffect, useMemo, memo, useCallback } from "react"
 import { useClerk, useUser } from '@clerk/nextjs'
 import { useRouter } from 'next/navigation'
 import { FaMinus, FaPaperPlane, FaPlay, FaPause, FaPlus, FaSearch, FaChevronDown, FaChevronUp, FaSignOutAlt } from "react-icons/fa"
@@ -8,6 +8,45 @@ import { MdDelete } from "react-icons/md"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { fetchUserData, saveUserData, fetchTasks, createTask, deleteTask, fetchLoops, saveLoop, deleteLoop, updateTask, getSubscriptionStatus, createCheckoutSession } from '@/lib/api-helpers';
 import OutcomesDashboard from '@/components/OutcomesDashboard';
+
+const LOCAL_USER_STATE_KEY = 'burnEngine_userState_v1';
+const LOCAL_STATE_VERSION = 1;
+const TIMER_SYNC_INTERVAL_MS = 45000; // 45 seconds between server syncs
+const TIMER_PERSIST_INTERVAL_MS = 15000; // 15 seconds between local cache writes
+const SETTINGS_DEBOUNCE_MS = 5000;
+const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const BROADCAST_CHANNEL_NAME = 'burnEngine_timer_control';
+
+interface LocalUserState {
+  version: number;
+  updatedAt: number;
+  hourlyRate: number;
+  currentTask: string;
+  category: string;
+  showMinerals: boolean;
+  taskHistoryMinimized: boolean;
+  timer: number;
+  timerStartTime: number | null;
+}
+
+type SettingsPayload = {
+  hourlyRate: number;
+  currentTask: string;
+  category: string;
+  showMinerals: boolean;
+  taskHistoryMinimized: boolean;
+};
+
+const areSettingsEqual = (a: SettingsPayload | null, b: SettingsPayload | null) => {
+  if (!a || !b) return false;
+  return (
+    a.hourlyRate === b.hourlyRate &&
+    a.currentTask === b.currentTask &&
+    a.category === b.category &&
+    a.showMinerals === b.showMinerals &&
+    a.taskHistoryMinimized === b.taskHistoryMinimized
+  );
+};
 
 const formatTime = (seconds: number) => {
   const m = Math.floor(seconds / 60)
