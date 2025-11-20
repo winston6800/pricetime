@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/clerk';
-import { getOrCreateStripeCustomer } from '@/lib/subscription';
+import { getOrCreateStripeCustomer, getSubscriptionStatus } from '@/lib/subscription';
 import { stripe } from '@/lib/stripe';
 
 export async function POST(request: NextRequest) {
@@ -11,6 +11,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Stripe price ID not configured' },
         { status: 500 }
+      );
+    }
+
+    // Check if user already has an active subscription
+    const subscriptionStatus = await getSubscriptionStatus(user.id);
+    if (subscriptionStatus.isPro && ['active', 'trialing'].includes(subscriptionStatus.status)) {
+      return NextResponse.json(
+        { error: 'You already have an active Pro subscription' },
+        { status: 400 }
       );
     }
 

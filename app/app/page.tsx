@@ -415,16 +415,27 @@ export default function BurnEngine() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('upgraded') === 'true') {
-      // Refresh subscription status after upgrade
-      setTimeout(() => {
-        loadSubscriptionStatus().then((isPro) => {
-          if (isPro) {
-            // Remove query param and show success
-            window.history.replaceState({}, '', '/app');
-            alert('Welcome to Pro! 🎉');
-          }
-        });
-      }, 2000); // Wait 2 seconds for webhook to process
+      // Refresh subscription status after upgrade with retries
+      let retries = 0;
+      const maxRetries = 5;
+      const checkStatus = async () => {
+        const isPro = await loadSubscriptionStatus();
+        if (isPro) {
+          // Remove query param and show success
+          window.history.replaceState({}, '', '/app');
+          alert('Welcome to Pro! 🎉');
+        } else if (retries < maxRetries) {
+          retries++;
+          // Retry after 2 seconds
+          setTimeout(checkStatus, 2000);
+        } else {
+          // If still not pro after retries, show message
+          window.history.replaceState({}, '', '/app');
+          alert('Payment processed! Your Pro status should update shortly. Please refresh the page if it doesn\'t appear.');
+        }
+      };
+      // Start checking after 2 seconds
+      setTimeout(checkStatus, 2000);
     }
   }, []);
 
@@ -775,6 +786,12 @@ export default function BurnEngine() {
   };
 
   const handleUpgrade = async () => {
+    // Prevent multiple clicks
+    if (isPro) {
+      alert('You already have Pro access!');
+      return;
+    }
+
     try {
       const checkoutUrl = await createCheckoutSession();
       if (checkoutUrl) {
@@ -786,7 +803,14 @@ export default function BurnEngine() {
     } catch (error: any) {
       console.error('Error creating checkout session:', error);
       const errorMessage = error?.message || 'Unknown error';
-      alert(`Failed to start upgrade: ${errorMessage}. Check browser console and Vercel logs.`);
+      // Check if it's the "already has subscription" error
+      if (errorMessage.includes('already have an active')) {
+        alert('You already have an active Pro subscription. Please refresh the page.');
+        // Refresh subscription status
+        await loadSubscriptionStatus();
+      } else {
+        alert(`Failed to start upgrade: ${errorMessage}. Check browser console and Vercel logs.`);
+      }
     }
   };
 
@@ -842,22 +866,32 @@ export default function BurnEngine() {
           {!isPro && (
             <button
               onClick={handleUpgrade}
+              disabled={isPro}
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
-                background: "#3498db",
+                background: isPro ? "#95a5a6" : "#3498db",
                 border: "none",
-                cursor: "pointer",
+                cursor: isPro ? "not-allowed" : "pointer",
                 color: "#fff",
                 fontSize: 14,
                 fontWeight: 600,
                 padding: "8px 16px",
                 borderRadius: 6,
                 transition: "background 0.2s",
+                opacity: isPro ? 0.6 : 1,
               }}
-              onMouseEnter={(e) => e.currentTarget.style.background = "#2980b9"}
-              onMouseLeave={(e) => e.currentTarget.style.background = "#3498db"}
+              onMouseEnter={(e) => {
+                if (!isPro) {
+                  e.currentTarget.style.background = "#2980b9";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isPro) {
+                  e.currentTarget.style.background = "#3498db";
+                }
+              }}
             >
               <span>Upgrade to Pro</span>
             </button>

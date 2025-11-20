@@ -39,18 +39,59 @@ export async function POST(request: NextRequest) {
 
   try {
     switch (event.type) {
-      case 'customer.subscription.created':
-      case 'customer.subscription.updated': {
-        const subscription = event.data.object as any;
-        const userId = subscription.metadata?.userId;
+      case 'checkout.session.completed': {
+        const session = event.data.object as any;
+        const userId = session.metadata?.userId;
 
         if (!userId) {
-          console.error('No userId in subscription metadata');
+          console.error('No userId in checkout session metadata');
           break;
         }
 
+        // If this is a subscription checkout, the subscription will be created
+        // We'll handle it in customer.subscription.created
+        if (session.mode === 'subscription' && session.subscription) {
+          const subscriptionId = session.subscription as string;
+          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+          
+          // Get customer to find user
+          const stripeCustomer = await prisma.stripeCustomer.findUnique({
+            where: { stripeCustomerId: subscription.customer as string },
+          });
+
+          if (!stripeCustomer) {
+            console.error('Stripe customer not found in database');
+            break;
+          }
+
+          // Update or create subscription
+          await prisma.subscription.upsert({
+            where: { userId: stripeCustomer.userId },
+            update: {
+              stripeSubscriptionId: subscription.id,
+              status: subscription.status,
+              plan: 'pro',
+              currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+              cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
+            },
+            create: {
+              userId: stripeCustomer.userId,
+              stripeSubscriptionId: subscription.id,
+              status: subscription.status,
+              plan: 'pro',
+              currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+              cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
+            },
+          });
+        }
+        break;
+      }
+
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated': {
+        const subscription = event.data.object as any;
+
         // Get customer to find user
-        const customer = await stripe.customers.retrieve(subscription.customer as string);
         const stripeCustomer = await prisma.stripeCustomer.findUnique({
           where: { stripeCustomerId: subscription.customer as string },
         });
