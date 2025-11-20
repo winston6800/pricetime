@@ -779,10 +779,14 @@ export default function BurnEngine() {
       const checkoutUrl = await createCheckoutSession();
       if (checkoutUrl) {
         window.location.href = checkoutUrl;
+      } else {
+        console.error('No checkout URL returned');
+        alert('Failed to start upgrade: No checkout URL received. Please check Vercel logs.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating checkout session:', error);
-      alert('Failed to start upgrade. Please try again.');
+      const errorMessage = error?.message || 'Unknown error';
+      alert(`Failed to start upgrade: ${errorMessage}. Check browser console and Vercel logs.`);
     }
   };
 
