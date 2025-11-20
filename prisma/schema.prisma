@@ -20,10 +20,12 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Relations
-  userData    UserData?
-  taskHistory TaskHistory[]
-  openLoops   OpenLoop[]
-  incomeEntries IncomeEntry[]
+  userData       UserData?
+  taskHistory    TaskHistory[]
+  openLoops      OpenLoop[]
+  incomeEntries  IncomeEntry[]
+  stripeCustomer StripeCustomer?
+  subscription   Subscription?
   
   @@index([clerkId])
 }
@@ -112,4 +114,35 @@ model IncomeEntry {
   
   @@index([userId])
   @@index([timestamp])
+}
+
+// Stripe customer (links Clerk user to Stripe)
+model StripeCustomer {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripeCustomerId String   @unique // Stripe's customer ID
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([stripeCustomerId])
+}
+
+// Subscription (tracks user's Pro subscription status)
+model Subscription {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripeSubscriptionId  String   @unique // Stripe's subscription ID
+  status                String   // active, canceled, past_due, trialing, unpaid
+  plan                  String   @default("free") // free, pro
+  currentPeriodEnd      DateTime // When current billing period ends
+  cancelAtPeriodEnd     Boolean  @default(false) // Will cancel at period end
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([stripeSubscriptionId])
+  @@index([status])
 }

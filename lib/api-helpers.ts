@@ -156,3 +156,37 @@ export async function deleteIncomeEntry(entryId: string) {
   return res.json();
 }
 
+// Stripe subscription helpers
+export async function createCheckoutSession() {
+  const res = await fetch('/api/stripe/create-checkout', {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: 'Failed to create checkout session' }));
+    throw new Error(error.error || 'Failed to create checkout session');
+  }
+  const data = await res.json();
+  return data.url; // Returns checkout URL
+}
+
+export async function createPortalSession() {
+  const res = await fetch('/api/stripe/create-portal', {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: 'Failed to create portal session' }));
+    throw new Error(error.error || 'Failed to create portal session');
+  }
+  const data = await res.json();
+  return data.url; // Returns portal URL
+}
+
+export async function getSubscriptionStatus() {
+  const res = await fetch('/api/subscription');
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: 'Failed to fetch subscription status' }));
+    throw new Error(error.error || 'Failed to fetch subscription status');
+  }
+  return res.json();
+}
+

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { FaMinus, FaPaperPlane, FaPlay, FaPause, FaPlus, FaSearch, FaChevronDown, FaChevronUp, FaSignOutAlt } from "react-icons/fa"
 import { MdDelete } from "react-icons/md"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { fetchUserData, saveUserData, fetchTasks, createTask, deleteTask, fetchLoops, saveLoop, deleteLoop, updateTask } from '@/lib/api-helpers';
+import { fetchUserData, saveUserData, fetchTasks, createTask, deleteTask, fetchLoops, saveLoop, deleteLoop, updateTask, getSubscriptionStatus, createCheckoutSession } from '@/lib/api-helpers';
 import OutcomesDashboard from '@/components/OutcomesDashboard';
 
 const formatTime = (seconds: number) => {
@@ -338,6 +338,7 @@ export default function BurnEngine() {
   const [valueEarned, setValueEarned] = useState<string>("");
   const [categoryEditTaskId, setCategoryEditTaskId] = useState<string | null>(null);
   const [categoryEditValue, setCategoryEditValue] = useState<string>("rock");
+  const [isPro, setIsPro] = useState<boolean>(false);
   const startTimeRef = useRef<number | null>(null);
 
   // Task History filters and sorting
@@ -349,6 +350,19 @@ export default function BurnEngine() {
 
   // Progress Dashboard
   const [timeframe, setTimeframe] = useState<"week" | "month">("week");
+
+  // Load subscription status
+  const loadSubscriptionStatus = async () => {
+    try {
+      const subscription = await getSubscriptionStatus();
+      setIsPro(subscription.isPro || false);
+      return subscription.isPro || false;
+    } catch (error) {
+      console.error('Error loading subscription:', error);
+      setIsPro(false);
+      return false;
+    }
+  };
 
   // On mount, load state from API
   useEffect(() => {
@@ -385,6 +399,9 @@ export default function BurnEngine() {
           valueEarned: task.valueEarned || 0,
         })));
         
+        // Load subscription status
+        await loadSubscriptionStatus();
+        
         setHasLoaded(true);
       } catch (error) {
         console.error('Error loading data:', error);
@@ -392,6 +409,23 @@ export default function BurnEngine() {
       }
     }
     loadData();
+  }, []);
+
+  // Check if user just upgraded (from URL params)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('upgraded') === 'true') {
+      // Refresh subscription status after upgrade
+      setTimeout(() => {
+        loadSubscriptionStatus().then((isPro) => {
+          if (isPro) {
+            // Remove query param and show success
+            window.history.replaceState({}, '', '/app');
+            alert('Welcome to Pro! 🎉');
+          }
+        });
+      }, 2000); // Wait 2 seconds for webhook to process
+    }
   }, []);
 
   // Start timer interval only after timer is loaded
@@ -740,6 +774,18 @@ export default function BurnEngine() {
     router.push('/');
   };
 
+  const handleUpgrade = async () => {
+    try {
+      const checkoutUrl = await createCheckoutSession();
+      if (checkoutUrl) {
+        window.location.href = checkoutUrl;
+      }
+    } catch (error) {
+      console.error('Error creating checkout session:', error);
+      alert('Failed to start upgrade. Please try again.');
+    }
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: "#f8f9fa", padding: "2rem 1rem" }}>
       {/* Navigation Header */}
@@ -751,49 +797,90 @@ export default function BurnEngine() {
         alignItems: "center",
         padding: "0 1rem",
       }}>
-        <button
-          onClick={handleHome}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            color: "#3498db",
-            fontSize: 18,
-            fontWeight: 700,
-            padding: "8px 12px",
-            borderRadius: 6,
-            transition: "background 0.2s",
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.background = "#f0f0f0"}
-          onMouseLeave={(e) => e.currentTarget.style.background = "none"}
-        >
-          <span>BurnEngine</span>
-        </button>
-        <button
-          onClick={handleSignOut}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            background: "#f1f1f1",
-            border: "none",
-            cursor: "pointer",
-            color: "#666",
-            fontSize: 14,
-            fontWeight: 500,
-            padding: "8px 16px",
-            borderRadius: 6,
-            transition: "background 0.2s",
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.background = "#e0e0e0"}
-          onMouseLeave={(e) => e.currentTarget.style.background = "#f1f1f1"}
-        >
-          <FaSignOutAlt />
-          <span>Sign Out</span>
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button
+            onClick={handleHome}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "#3498db",
+              fontSize: 18,
+              fontWeight: 700,
+              padding: "8px 12px",
+              borderRadius: 6,
+              transition: "background 0.2s",
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = "#f0f0f0"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "none"}
+          >
+            <span>BurnEngine</span>
+          </button>
+          {isPro && (
+            <span style={{
+              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+              color: "#fff",
+              fontSize: 11,
+              fontWeight: 700,
+              padding: "4px 10px",
+              borderRadius: 12,
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+            }}>
+              Pro
+            </span>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {!isPro && (
+            <button
+              onClick={handleUpgrade}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                background: "#3498db",
+                border: "none",
+                cursor: "pointer",
+                color: "#fff",
+                fontSize: 14,
+                fontWeight: 600,
+                padding: "8px 16px",
+                borderRadius: 6,
+                transition: "background 0.2s",
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = "#2980b9"}
+              onMouseLeave={(e) => e.currentTarget.style.background = "#3498db"}
+            >
+              <span>Upgrade to Pro</span>
+            </button>
+          )}
+          <button
+            onClick={handleSignOut}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              background: "#f1f1f1",
+              border: "none",
+              cursor: "pointer",
+              color: "#666",
+              fontSize: 14,
+              fontWeight: 500,
+              padding: "8px 16px",
+              borderRadius: 6,
+              transition: "background 0.2s",
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = "#e0e0e0"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "#f1f1f1"}
+          >
+            <FaSignOutAlt />
+            <span>Sign Out</span>
+          </button>
+        </div>
       </div>
 
       {/* Flex row for main timer and cumulative chart */}
@@ -1267,15 +1354,15 @@ export default function BurnEngine() {
                                     <option value="sand">Sand</option>
                                   </select>
                                 ) : (
-                                  <span
-                                    style={{
-                                      padding: "2px 6px",
-                                      borderRadius: 4,
-                                      fontSize: 10,
-                                      fontWeight: 600,
-                                      textTransform: "uppercase",
-                                      background: task.category === "rock" ? "#e74c3c" : task.category === "pebble" ? "#f39c12" : "#95a5a6",
-                                      color: "#fff",
+                                <span
+                                  style={{
+                                    padding: "2px 6px",
+                                    borderRadius: 4,
+                                    fontSize: 10,
+                                    fontWeight: 600,
+                                    textTransform: "uppercase",
+                                    background: task.category === "rock" ? "#e74c3c" : task.category === "pebble" ? "#f39c12" : "#95a5a6",
+                                    color: "#fff",
                                       cursor: task.id ? "pointer" : "default",
                                     }}
                                     title={task.id ? "Click to change category" : undefined}
@@ -1284,10 +1371,10 @@ export default function BurnEngine() {
                                         setCategoryEditTaskId(task.id);
                                         setCategoryEditValue(task.category);
                                       }
-                                    }}
-                                  >
-                                    {task.category}
-                                  </span>
+                                  }}
+                                >
+                                  {task.category}
+                                </span>
                                 )}
                               </div>
                               <span style={{ color: "#e74c3c", fontWeight: 700, fontVariantNumeric: "tabular-nums", marginLeft: 0, fontSize: 14 }}>
@@ -1378,8 +1465,8 @@ export default function BurnEngine() {
         margin: "2rem auto 0 auto",
         flexWrap: "wrap",
       }}>
-        <OpenLoopsDashboard mainTaskActive={true} pauseMainTask={() => {}} />
-        <OutcomesDashboard isPro={true} />
+      <OpenLoopsDashboard mainTaskActive={true} pauseMainTask={() => {}} />
+        <OutcomesDashboard isPro={isPro} />
       </div>
     </div>
   );

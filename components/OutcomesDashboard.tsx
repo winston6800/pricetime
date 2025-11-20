@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react"
 import { FaEdit, FaPlus } from "react-icons/fa"
-import { fetchUserData, saveUserData, fetchTasks, fetchIncomeEntries, createIncomeEntry } from '@/lib/api-helpers'
+import { fetchUserData, saveUserData, fetchTasks, fetchIncomeEntries, createIncomeEntry, createCheckoutSession } from '@/lib/api-helpers'
 
 interface OutcomesDashboardProps {
   isPro?: boolean // For now, we'll show it to everyone, gate later
@@ -211,6 +211,69 @@ export default function OutcomesDashboard({ isPro = true }: OutcomesDashboardPro
   const hasGoal = goalTarget !== null && goalTarget > 0
   const progress = hasGoal ? Math.min((earningsData.totalEarned / goalTarget) * 100, 100) : 0
   const remaining = hasGoal ? Math.max(goalTarget - earningsData.totalEarned, 0) : 0
+
+  const handleUpgrade = async () => {
+    try {
+      const checkoutUrl = await createCheckoutSession();
+      if (checkoutUrl) {
+        window.location.href = checkoutUrl;
+      }
+    } catch (error) {
+      console.error('Error creating checkout session:', error);
+      alert('Failed to start upgrade. Please try again.');
+    }
+  };
+
+  // Show upgrade prompt for free users
+  if (!isPro) {
+    return (
+      <div style={{
+        maxWidth: 400,
+        background: "#fff",
+        borderRadius: 12,
+        boxShadow: "0 2px 12px #0001",
+        padding: 24,
+        flex: 1,
+        minWidth: 300,
+      }}>
+        <h3 style={{ margin: "0 0 12px 0", fontWeight: 700, fontSize: 18 }}>Outcomes Dashboard</h3>
+        <p style={{ color: "#666", fontSize: 14, marginBottom: 16, lineHeight: 1.5 }}>
+          Track your earnings toward life-changing goals. See your effective hourly rate and stay motivated.
+        </p>
+        <div style={{ 
+          background: "#f8f9fa", 
+          borderRadius: 8, 
+          padding: 16, 
+          marginBottom: 16,
+          border: "1px solid #e9ecef"
+        }}>
+          <div style={{ fontSize: 12, color: "#666", marginBottom: 8, fontWeight: 600 }}>Pro Features:</div>
+          <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: "#666", lineHeight: 1.8 }}>
+            <li>Unlimited task history</li>
+            <li>Multiple goals tracking</li>
+            <li>Advanced analytics</li>
+            <li>Export your data</li>
+          </ul>
+        </div>
+        <button
+          onClick={handleUpgrade}
+          style={{
+            width: "100%",
+            background: "#3498db",
+            color: "#fff",
+            border: "none",
+            borderRadius: 6,
+            padding: "12px",
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          Upgrade to Pro - $9/month
+        </button>
+      </div>
+    );
+  }
 
   return (
     <>

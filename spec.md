@@ -437,7 +437,7 @@ Category selected before/during task, saved with task in history.
 - Basic productivity chart
 - Open loops tracking
 - Login streak
-- **Limitations:** 30-day history limit, no data export, no multi-device sync
+- **Limitations:** 30-day history limit, no data export, no multi-device sync, no Outcomes Dashboard
 
 **Pro Tier ($9/month or $90/year - 17% savings):**
 - Everything in Free
@@ -461,6 +461,61 @@ Category selected before/during task, saved with task in history.
 - 1,000 free users → 5% conversion = 50 Pro users
 - 50 × $9/month = $450/month = $5,400/year
 - At scale: 10,000 free → 500 Pro = $4,500/month = $54,000/year
+
+## Subscription & Billing (Stripe Integration)
+
+**Subscription Management:**
+- Stripe handles all payment processing and subscription lifecycle
+- Database stores subscription status for fast authorization checks
+- Webhooks sync subscription state from Stripe to database
+
+**Database Schema:**
+- `StripeCustomer` model: Links Clerk user ID to Stripe customer ID
+- `Subscription` model: Tracks subscription status, plan, period end, cancel status
+- Auto-created: Stripe customer created when user first authenticates
+
+**Subscription Flow:**
+1. **User Signup:** Clerk user created → Stripe customer auto-created on first API call
+2. **Upgrade:** User clicks "Upgrade to Pro" → Stripe Checkout session created → User redirected to Stripe
+3. **Payment Success:** Stripe webhook `customer.subscription.created` → Database updated → User gains Pro access
+4. **Renewal:** Stripe webhook `invoice.payment_succeeded` → Subscription period extended
+5. **Cancellation:** User cancels via Customer Portal → Webhook `customer.subscription.deleted` → Access until period end
+6. **Payment Failure:** Webhook `invoice.payment_failed` → Status set to `past_due` → User notified
+
+**Authorization Logic:**
+- Server-side only: Never trust client-side subscription checks
+- Check subscription status from database (not Stripe API directly for performance)
+- Pro features gated by `isPro` boolean from subscription status
+- Subscription status checked on page load, cached in component state
+- Active statuses: `active`, `trialing` (both grant Pro access)
+- Inactive statuses: `canceled`, `past_due`, `unpaid` (no Pro access)
+
+**API Routes:**
+- `/api/stripe/create-checkout` - Creates Stripe Checkout session for upgrade
+- `/api/stripe/webhook` - Handles Stripe webhook events (subscription lifecycle)
+- `/api/stripe/create-portal` - Creates Stripe Customer Portal session (manage subscription)
+- `/api/subscription` - Returns current user's subscription status
+
+**Webhook Events Handled:**
+- `customer.subscription.created` - New subscription created
+- `customer.subscription.updated` - Subscription modified (upgrade/downgrade/renewal)
+- `customer.subscription.deleted` - Subscription canceled
+- `invoice.payment_succeeded` - Payment successful, extend period
+- `invoice.payment_failed` - Payment failed, mark as past_due
+
+**Security:**
+- Webhook signature verification required (prevents fake events)
+- All subscription checks server-side only
+- Stripe customer ID stored securely, never exposed to client
+- Environment variables: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`
+
+**UI Elements:**
+- Upgrade button in header (shown for free users)
+- **Pro badge** in header (purple gradient badge showing "Pro" for active subscribers)
+- Outcomes Dashboard shows upgrade prompt for free users, full features for Pro
+- Pro features show upgrade prompts when accessed by free users
+- Customer Portal link for Pro users to manage subscription (future: add to settings)
+- **Post-payment refresh:** After returning from Stripe Checkout, app checks URL param `?upgraded=true`, waits 2 seconds for webhook processing, then refreshes subscription status and shows success message
 
 ---
 
