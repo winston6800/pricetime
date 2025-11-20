@@ -3,13 +3,17 @@ import { stripe } from '@/lib/stripe';
 import { prisma } from '@/lib/db';
 import { headers } from 'next/headers';
 
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-if (!webhookSecret) {
-  throw new Error('STRIPE_WEBHOOK_SECRET is not set');
-}
-
 export async function POST(request: NextRequest) {
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!webhookSecret) {
+    console.error('STRIPE_WEBHOOK_SECRET is not set');
+    return NextResponse.json(
+      { error: 'Webhook secret not configured' },
+      { status: 500 }
+    );
+  }
+
   const body = await request.text();
   const headersList = await headers();
   const signature = headersList.get('stripe-signature');
