@@ -110,7 +110,24 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const data = await request.json();
+    // Handle both regular JSON and sendBeacon Blob requests
+    let data: any;
+    const contentType = request.headers.get('content-type') || '';
+    
+    if (contentType.includes('application/json')) {
+      data = await request.json();
+    } else {
+      // Handle sendBeacon Blob (sent as text/plain or application/octet-stream)
+      const text = await request.text();
+      try {
+        data = JSON.parse(text);
+      } catch (error) {
+        return NextResponse.json(
+          { error: 'Invalid request body' },
+          { status: 400 }
+        );
+      }
+    }
 
     // Build update object only with provided fields, with validation
     const updateData: any = {};
