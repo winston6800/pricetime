@@ -16,6 +16,7 @@ const TIMER_PERSIST_INTERVAL_MS = 15000; // 15 seconds between local cache write
 const SETTINGS_DEBOUNCE_MS = 5000;
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const BROADCAST_CHANNEL_NAME = 'burnEngine_timer_control';
+const CLIENT_RATE_LIMIT_MS = 1000; // Minimum 1 second between API calls
 
 interface LocalUserState {
   version: number;
@@ -403,16 +404,47 @@ export default function BurnEngine() {
     }
   };
 
-  // On mount, load state from API
+  // On mount, load state from localStorage first (fast), then sync with API
   useEffect(() => {
     async function loadData() {
       try {
-        // Load user data
+        // Try to load from localStorage first for instant UI
+        let cachedState: LocalUserState | null = null;
+        if (typeof window !== 'undefined') {
+          try {
+            const cached = localStorage.getItem(LOCAL_USER_STATE_KEY);
+            if (cached) {
+              cachedState = JSON.parse(cached);
+              // Only use cache if it's recent (within 1 hour) and same version
+              if (cachedState && 
+                  cachedState.version === LOCAL_STATE_VERSION &&
+                  Date.now() - cachedState.updatedAt < 60 * 60 * 1000) {
+                setHourlyRate(cachedState.hourlyRate || 90);
+                setCurrentTask(cachedState.currentTask || '');
+                setCurrentTaskCategory(cachedState.category || 'rock');
+                setShowMinerals(cachedState.showMinerals ?? true);
+                setTaskHistoryMinimized(cachedState.taskHistoryMinimized ?? false);
+                
+                // Restore timer if it was running
+                if (cachedState.timerStartTime) {
+                  const elapsed = Math.floor((Date.now() - cachedState.timerStartTime) / 1000);
+                  setTimer(elapsed);
+                  startTimeRef.current = cachedState.timerStartTime;
+                } else {
+                  setTimer(cachedState.timer || 0);
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error loading from localStorage:', error);
+          }
+        }
+
+        // Load fresh data from API (authoritative source)
         const userData = await fetchUserData();
         setHourlyRate(userData.hourlyRate || 90);
         setCurrentTask(userData.currentTask || '');
         setCurrentTaskCategory(userData.category || 'rock');
-        setTimer(userData.timer || 0);
         setShowMinerals(userData.showMinerals ?? true);
         setTaskHistoryMinimized(userData.taskHistoryMinimized ?? false);
         setLoginStreak(userData.loginStreak || 1);
@@ -421,10 +453,22 @@ export default function BurnEngine() {
         // Set timer start time if timer is running
         if (userData.timerStartTime) {
           startTimeRef.current = Number(userData.timerStartTime);
+          const elapsed = Math.floor((Date.now() - Number(userData.timerStartTime)) / 1000);
+          setTimer(elapsed);
         } else if (userData.timer > 0) {
           // If timer has value but no start time, calculate it
           startTimeRef.current = Date.now() - (userData.timer * 1000);
+          setTimer(userData.timer);
+        } else {
+          setTimer(0);
         }
+
+        // Update last saved refs
+        const finalTimer = userData.timerStartTime 
+          ? Math.floor((Date.now() - Number(userData.timerStartTime)) / 1000)
+          : (userData.timer || 0);
+        lastSavedTimerRef.current = finalTimer;
+        lastSavedStartTimeRef.current = startTimeRef.current;
         
         // Load task history
         const tasks = await fetchTasks();
@@ -494,40 +538,256 @@ export default function BurnEngine() {
     return () => clearInterval(interval);
   }, [hasLoaded]);
 
-  // Save timer to API every 10 seconds (per spec)
+  // Low-cost timer sync: localStorage cache + optimized server sync
+  const lastSavedTimerRef = useRef<number>(0);
+  const lastSavedStartTimeRef = useRef<number | null>(null);
+  const isTabActiveRef = useRef<boolean>(true);
+  const lastActivityRef = useRef<number>(Date.now());
+  const saveInProgressRef = useRef<boolean>(false);
+  const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
+  const isPrimaryTabRef = useRef<boolean>(false);
+  const lastApiCallRef = useRef<number>(0); // Client-side rate limiting
+
+  // Initialize BroadcastChannel for multi-tab coordination
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const channel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
+    broadcastChannelRef.current = channel;
+
+    // Claim primary tab status
+    channel.postMessage({ type: 'claim_primary', timestamp: Date.now() });
+    isPrimaryTabRef.current = true;
+
+    // Listen for other tabs claiming primary
+    channel.onmessage = (event) => {
+      if (event.data.type === 'claim_primary') {
+        // If another tab claims primary after us, yield (first come first served)
+        if (event.data.timestamp < Date.now() - 1000) {
+          isPrimaryTabRef.current = false;
+        }
+      }
+    };
+
+    return () => {
+      channel.close();
+    };
+  }, []);
+
+  // Track page visibility (pause saves when tab inactive)
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const handleVisibilityChange = () => {
+      isTabActiveRef.current = !document.hidden;
+      if (!document.hidden) {
+        lastActivityRef.current = Date.now();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+
+  // Track user activity for idle detection
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const updateActivity = () => {
+      lastActivityRef.current = Date.now();
+    };
+
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    events.forEach(event => window.addEventListener(event, updateActivity, { passive: true }));
+
+    return () => {
+      events.forEach(event => window.removeEventListener(event, updateActivity));
+    };
+  }, []);
+
+  // Save to localStorage (fast, always available)
+  const saveToLocalCache = useCallback((timerValue: number, startTime: number | null) => {
+    if (typeof window === 'undefined') return;
+    
+    try {
+      const state: LocalUserState = {
+        version: LOCAL_STATE_VERSION,
+        updatedAt: Date.now(),
+        hourlyRate,
+        currentTask,
+        category: currentTaskCategory,
+        showMinerals,
+        taskHistoryMinimized,
+        timer: timerValue,
+        timerStartTime: startTime,
+      };
+      localStorage.setItem(LOCAL_USER_STATE_KEY, JSON.stringify(state));
+    } catch (error) {
+      console.error('Error saving to localStorage:', error);
+    }
+  }, [hourlyRate, currentTask, currentTaskCategory, showMinerals, taskHistoryMinimized]);
+
+  // Save to server (only when needed)
+  const saveTimerToServer = useCallback(async (timerValue: number, startTime: number | null, force = false) => {
+    // Skip if not primary tab (multi-tab coordination)
+    if (!isPrimaryTabRef.current && !force) return;
+
+    // Skip if save already in progress
+    if (saveInProgressRef.current) return;
+
+    // Client-side rate limiting (prevent rapid-fire calls)
+    const timeSinceLastCall = Date.now() - lastApiCallRef.current;
+    if (timeSinceLastCall < CLIENT_RATE_LIMIT_MS && !force) return;
+
+    // Skip if tab is inactive (unless forced)
+    if (!isTabActiveRef.current && !force) return;
+
+    // Skip if idle (unless forced)
+    const idleTime = Date.now() - lastActivityRef.current;
+    if (idleTime > IDLE_TIMEOUT_MS && !force) return;
+
+    // Skip if timer hasn't changed (unless forced)
+    if (!force && 
+        timerValue === lastSavedTimerRef.current && 
+        startTime === lastSavedStartTimeRef.current) {
+      return;
+    }
+
+    saveInProgressRef.current = true;
+    lastApiCallRef.current = Date.now();
+    try {
+      await saveUserData({
+        timer: timerValue,
+        timerStartTime: startTime,
+      });
+      lastSavedTimerRef.current = timerValue;
+      lastSavedStartTimeRef.current = startTime;
+    } catch (error) {
+      console.error('Error saving timer to server:', error);
+    } finally {
+      saveInProgressRef.current = false;
+    }
+  }, []);
+
+  // Periodic local cache save (fast, every 15s)
   useEffect(() => {
     if (!hasLoaded) return;
-    const interval = setInterval(async () => {
-      try {
-        await saveUserData({
-          timer,
+    
+    const interval = setInterval(() => {
+      if (startTimeRef.current !== null) {
+        const currentTimer = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        saveToLocalCache(currentTimer, startTimeRef.current);
+      }
+    }, TIMER_PERSIST_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [hasLoaded, saveToLocalCache]);
+
+  // Periodic server sync (slower, every 45s, only if conditions met)
+  useEffect(() => {
+    if (!hasLoaded) return;
+
+    const interval = setInterval(() => {
+      if (startTimeRef.current !== null) {
+        const currentTimer = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        saveTimerToServer(currentTimer, startTimeRef.current, false);
+      }
+    }, TIMER_SYNC_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [hasLoaded, saveTimerToServer]);
+
+  // Save on page unload (critical - don't lose data)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !hasLoaded) return;
+
+    const handleBeforeUnload = () => {
+      if (startTimeRef.current !== null) {
+        const currentTimer = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        // Use sendBeacon for reliable unload save (doesn't block navigation)
+        const data = JSON.stringify({
+          timer: currentTimer,
           timerStartTime: startTimeRef.current,
         });
-      } catch (error) {
-        console.error('Error saving timer:', error);
+        navigator.sendBeacon('/api/data', new Blob([data], { type: 'application/json' }));
       }
-    }, 10000); // Save timer every 10 seconds
-    return () => clearInterval(interval);
-  }, [timer, hasLoaded]);
+    };
 
-  // Save user settings to API whenever they change (debounced 2 seconds per spec)
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasLoaded]);
+
+  // Save on visibility change (when tab becomes hidden)
+  useEffect(() => {
+    if (typeof document === 'undefined' || !hasLoaded) return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden && startTimeRef.current !== null) {
+        // Tab is being hidden - save immediately
+        const currentTimer = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        saveTimerToServer(currentTimer, startTimeRef.current, true);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [hasLoaded, saveTimerToServer]);
+
+  // Save user settings to API (optimized: longer debounce, only if changed)
+  const lastSavedSettingsRef = useRef<SettingsPayload | null>(null);
+  const settingsSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     if (!hasLoaded) return;
-    const timeout = setTimeout(async () => {
-      try {
-        await saveUserData({
-          hourlyRate,
-          currentTask,
-          category: currentTaskCategory,
-          showMinerals,
-          taskHistoryMinimized,
-        });
-      } catch (error) {
-        console.error('Error saving user data:', error);
+
+    const currentSettings: SettingsPayload = {
+      hourlyRate,
+      currentTask,
+      category: currentTaskCategory,
+      showMinerals,
+      taskHistoryMinimized,
+    };
+
+    // Clear existing timeout
+    if (settingsSaveTimeoutRef.current) {
+      clearTimeout(settingsSaveTimeoutRef.current);
+    }
+
+    // Skip if settings haven't changed
+    if (areSettingsEqual(currentSettings, lastSavedSettingsRef.current)) {
+      return;
+    }
+
+    // Save to localStorage immediately (fast)
+    saveToLocalCache(timer, startTimeRef.current);
+
+    // Debounce server save (longer delay for cost savings)
+    settingsSaveTimeoutRef.current = setTimeout(async () => {
+      // Double-check settings haven't changed during debounce
+      const finalSettings: SettingsPayload = {
+        hourlyRate,
+        currentTask,
+        category: currentTaskCategory,
+        showMinerals,
+        taskHistoryMinimized,
+      };
+
+      if (!areSettingsEqual(finalSettings, lastSavedSettingsRef.current)) {
+        try {
+          await saveUserData(finalSettings);
+          lastSavedSettingsRef.current = finalSettings;
+        } catch (error) {
+          console.error('Error saving user settings:', error);
+        }
       }
-    }, 2000); // Debounce saves by 2 seconds
-    return () => clearTimeout(timeout);
-  }, [hourlyRate, currentTask, currentTaskCategory, showMinerals, taskHistoryMinimized, hasLoaded])
+    }, SETTINGS_DEBOUNCE_MS);
+
+    return () => {
+      if (settingsSaveTimeoutRef.current) {
+        clearTimeout(settingsSaveTimeoutRef.current);
+      }
+    };
+  }, [hourlyRate, currentTask, currentTaskCategory, showMinerals, taskHistoryMinimized, hasLoaded, timer, saveToLocalCache]);
 
   const moneySpent = ((timer / 3600) * hourlyRate).toFixed(2)
   const perMinuteSpent = (hourlyRate / 60).toFixed(2)
@@ -541,14 +801,14 @@ export default function BurnEngine() {
   const handleReset = async () => {
     setTimer(0);
     startTimeRef.current = null;
-    try {
-      await saveUserData({
-        timer: 0,
-        timerStartTime: null,
-      });
-    } catch (error) {
-      console.error('Error resetting timer:', error);
-    }
+    lastSavedTimerRef.current = 0;
+    lastSavedStartTimeRef.current = null;
+    
+    // Save to localStorage immediately
+    saveToLocalCache(0, null);
+    
+    // Save to server (force save on user action)
+    await saveTimerToServer(0, null, true);
   }
 
   // Handle finishing a task
@@ -581,16 +841,16 @@ export default function BurnEngine() {
     setCurrentTask("");
     setValueEarned("");
     setTimer(0);
-    startTimeRef.current = Date.now();
-    try {
-      await saveUserData({
-        currentTask: '',
-        timer: 0,
-        timerStartTime: Date.now(),
-      });
-    } catch (error) {
-      console.error('Error saving after finish task:', error);
-    }
+    const newStartTime = Date.now();
+    startTimeRef.current = newStartTime;
+    lastSavedTimerRef.current = 0;
+    lastSavedStartTimeRef.current = newStartTime;
+    
+    // Save to localStorage immediately
+    saveToLocalCache(0, newStartTime);
+    
+    // Save to server (force save on user action)
+    await saveTimerToServer(0, newStartTime, true);
   };
 
   const handleCategoryChange = async (taskId: string, newCategory: string) => {
